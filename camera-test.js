@@ -1,5 +1,6 @@
 const NodeWebcam = require('node-webcam')
-const path = require('path') // Import the path module
+const path = require('path')
+const fs = require('fs')
 
 const opts = {
 	width: 4608,
@@ -9,25 +10,30 @@ const opts = {
 	output: 'jpeg',
 	device: '/dev/video0',
 	callbackReturn: 'location',
-	verbose: false,
+	verbose: true, // Enable verbose to get more information
 }
 
 const Webcam = NodeWebcam.create(opts)
 
 // Define the folder path
-const folderPath = './images' // Replace with your desired folder path
+const folderPath = './images'
 
 // Ensure the directory exists
-const fs = require('fs')
 if (!fs.existsSync(folderPath)) {
+	console.log('Directory does not exist, creating:', folderPath)
 	fs.mkdirSync(folderPath, { recursive: true })
+} else {
+	console.log('Directory exists:', folderPath)
 }
 
+// Full path to save the image
+const imagePath = path.join(folderPath, 'test_picture.jpg')
+
 // Capture and save the image in the folder
-Webcam.capture(path.join(folderPath, 'test_picture'), (err, data) => {
+Webcam.capture(imagePath, (err, data) => {
 	if (err) {
-		console.log(err)
+		console.error('Error capturing image:', err)
 	} else {
-		console.log('Image captured:', data)
+		console.log('Image captured and saved at:', data)
 	}
 })
