@@ -1,156 +1,107 @@
-const i2cBus = require('i2c-bus');
-const Pca9685Driver = require('pca9685').Pca9685Driver;
+const i2cBus = require('i2c-bus')
+const Pca9685Driver = require('pca9685').Pca9685Driver
 
 // Configuration options for the PCA9685 servo driver
 const options = {
-    i2c: null,          // We'll initialize this after checking the bus
-    address: 0x40,      // Default I2C address for PCA9685
-    frequency: 50,      // Standard frequency for servos (50Hz)
-    debug: false,
-};
+  i2c: i2cBus.openSync(1),
+  address: 0x40, // Default I2C address for PCA9685
+  frequency: 50, // Standard frequency for servos (50Hz)
+  debug: false,
+}
 
-// Constants
-const TILT_MAX_DOWN_PULSE = 1350;
-const TILT_MAX_UP_PULSE = 2500;
-const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE)/2);
-const panChannel = 0;
-const tiltChannel = 1;
+// Initialize the PCA9685 servo driver
+const pwm = new Pca9685Driver(options, (err) => {
+  if (err) {
+    console.error('Error initializing PCA9685')
+    process.exit(-1)
+  }
 
-// Helper function to set servo pulse length with error checking
+  console.log('PCA9685 initialized')
+  startServoTest()
+})
+
+// Channels for the pan and tilt servos
+const panChannel = 0
+const tiltChannel = 1
+
+const TILT_MAX_DOWN_PULSE = 1350
+const TILT_MAX_UP_PULSE = 2500
+const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE)/2)
+
+// Helper function to set servo pulse length
 function setServoPulse(channel, pulse) {
-    try {
-        if (channel === 1) {
-            if (pulse < TILT_MAX_DOWN_PULSE) {
-                console.log('TILT: Max. DOWN reached');
-                return false;
-            } else if (pulse > TILT_MAX_UP_PULSE) {
-                console.log('TILT: Max. UP reached');
-                return false;
-            }
-        }
-        pwm.setPulseLength(channel, pulse);
-        return true;
-    } catch (error) {
-        console.error(`Error setting pulse for channel ${channel}:`, error);
-        return false;
+    if (channel === 1 && pulse < TILT_MAX_DOWN_PULSE) {
+        console.log('TILT: Max. DOWN reached')
+        return false
+    } else if (channel === 1 && pulse > TILT_MAX_UP_PULSE) {
+        console.log('TILT: Max. UP reached')
+        return false
     }
+    pwm.setPulseLength(channel, pulse)
 }
 
 // Helper function to add a delay
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Initialize I2C and PCA9685
-async function initializeHardware() {
-    try {
-        // First check if I2C bus is available
-        const i2c = await i2cBus.openPromisified(1);
-        
-        // Scan for the PCA9685 device
-        try {
-            await i2c.scan();
-            console.log('I2C bus scanned successfully');
-        } catch (error) {
-            console.error('Error scanning I2C bus:', error);
-            throw error;
-        }
-
-        // Now initialize the driver
-        options.i2c = i2cBus.openSync(1);
-        
-        return new Promise((resolve, reject) => {
-            const pwm = new Pca9685Driver(options, (err) => {
-                if (err) {
-                    console.error('Error initializing PCA9685:', err);
-                    reject(err);
-                    return;
-                }
-                console.log('PCA9685 initialized successfully');
-                resolve(pwm);
-            });
-        });
-    } catch (error) {
-        console.error('Error during hardware initialization:', error);
-        throw error;
-    }
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 // Main function to execute the test movements
-async function startServoTest(pwm) {
-    try {
-        console.log('Centering both servos...');
-        setServoPulse(tiltChannel, TILT_CENTER_PULSE);
-        await delay(1000);  // Reduced delay for testing
+async function startServoTest() {
+  try {
+    console.log('Centering both servos...')
+    //setServoPulse(panChannel, 1500) // Center pan
+    setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
+    await delay(10000)
 
-        console.log('Testing tilt servo...');
-        if (setServoPulse(panChannel, 500)) {
-            await delay(1000);
-        }
-        
-        if (setServoPulse(panChannel, 2500)) {
-            await delay(1000);
-        }
-        
-        if (setServoPulse(tiltChannel, 1600)) {
-            await delay(1000);
-        }
+    // 1. Move Pan Servo Left and Right
+    console.log('Testing pan servo: left, right, center')
+    //setServoPulse(panChannel, 1000) // Move pan servo left
+    //await delay(1000)
+    ///setServoPulse(panChannel, 2000) // Move pan servo right
+    //await delay(1000)
+    //setServoPulse(panChannel, 1500) // Return pan to center
+    //await delay(1000)
 
-        console.log('Returning to center position...');
-        setServoPulse(panChannel, 1500);
-        setServoPulse(tiltChannel, 1500);
-        await delay(1000);
+    // 2. Move Tilt Servo Up and Down
+    console.log('Testing tilt servo: up, down, center')
+    setServoPulse(panChannel, 500) // Move tilt servo up
+    await delay(1000)
+    setServoPulse(panChannel, 2500) // Move tilt servo down
+    await delay(1000)
+    setServoPulse(tiltChannel, 1600) // Return tilt to center
+    await delay(1000)
 
-        console.log('Test movements completed.');
-    } catch (error) {
-        console.error('Error during servo test:', error);
-    } finally {
-        try {
-            if (pwm) {
-                pwm.dispose();
-            }
-        } catch (error) {
-            console.error('Error disposing PWM:', error);
-        }
+    // 3. Pan Servo Sweeping Left to Right
+    /*console.log('Sweeping pan servo from left to right')
+    for (let pulse = 1000; pulse <= 2000; pulse += 250) {
+      setServoPulse(panChannel, pulse)
+      await delay(500) // Pause to observe each position
     }
+    setServoPulse(panChannel, 1500) // Return to center
+    await delay(1000)
+
+    // 4. Diagonal Movement: Bottom-Left to Top-Right
+    console.log('Diagonal movement: bottom-left to top-right')
+    setServoPulse(panChannel, 1000) // Move pan to left
+    setServoPulse(tiltChannel, 2000) // Move tilt down
+    await delay(1000)
+
+    setServoPulse(panChannel, 2000) // Move pan to right
+    setServoPulse(tiltChannel, 1000) // Move tilt up
+    await delay(1000)
+    */ 
+    setServoPulse(panChannel, 1500) // Center pan
+    setServoPulse(tiltChannel, 1500) // Center tilt
+    await delay(1000)
+
+    console.log('Test movements completed.')
+
+    // Cleanup: Turn off PWM output to stop any servo signals
+    pwm.dispose()
+    process.exit(0)
+  } catch (error) {
+    console.error('Error during servo test:', error)
+    pwm.dispose()
+    process.exit(1)
+  }
 }
-
-// Main execution
-async function main() {
-    let pwm = null;
-    try {
-        // Check I2C permissions
-        if (process.getuid() !== 0) {
-            console.error('This script must be run with sudo privileges');
-            process.exit(1);
-        }
-
-        pwm = await initializeHardware();
-        await startServoTest(pwm);
-    } catch (error) {
-        console.error('Fatal error:', error);
-    } finally {
-        try {
-            if (pwm) {
-                pwm.dispose();
-            }
-        } catch (error) {
-            console.error('Error during cleanup:', error);
-        }
-        process.exit(0);
-    }
-}
-
-// Handle Ctrl+C and other termination signals
-process.on('SIGINT', () => {
-    console.log('\nReceived SIGINT. Cleaning up...');
-    if (pwm) {
-        try {
-            pwm.dispose();
-        } catch (error) {
-            console.error('Error during emergency cleanup:', error);
-        }
-    }
-    process.exit(0);
-});
-
-// Start the program
-main().catch(console.error);
