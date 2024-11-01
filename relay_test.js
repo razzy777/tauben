@@ -6,7 +6,7 @@ const options = {
   line: 17      // GPIO line number (BCM numbering)
 };
 
-const servo = new Gpio('gpio-588', 'out');
+const servo = new Gpio(588, 'out');
 
 // Test by toggling the servo control line
 servo.writeSync(1);
