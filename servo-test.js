@@ -38,30 +38,30 @@ function delay(ms) {
 async function startServoTest() {
   try {
     console.log('Centering both servos...')
-    setServoPulse(panChannel, 1500) // Center pan
-    setServoPulse(tiltChannel, 1500) // Center tilt
+    //setServoPulse(panChannel, 1500) // Center pan
+    setServoPulse(tiltChannel, 500) // Center tilt
     await delay(1000)
 
     // 1. Move Pan Servo Left and Right
     console.log('Testing pan servo: left, right, center')
-    setServoPulse(panChannel, 1000) // Move pan servo left
-    await delay(1000)
-    setServoPulse(panChannel, 2000) // Move pan servo right
-    await delay(1000)
-    setServoPulse(panChannel, 1500) // Return pan to center
-    await delay(1000)
+    //setServoPulse(panChannel, 1000) // Move pan servo left
+    //await delay(1000)
+    ///setServoPulse(panChannel, 2000) // Move pan servo right
+    //await delay(1000)
+    //setServoPulse(panChannel, 1500) // Return pan to center
+    //await delay(1000)
 
     // 2. Move Tilt Servo Up and Down
     console.log('Testing tilt servo: up, down, center')
     setServoPulse(tiltChannel, 1000) // Move tilt servo up
     await delay(1000)
-    setServoPulse(tiltChannel, 2000) // Move tilt servo down
+    setServoPulse(tiltChannel, 1500) // Move tilt servo down
     await delay(1000)
-    setServoPulse(tiltChannel, 1500) // Return tilt to center
+    setServoPulse(tiltChannel, 1600) // Return tilt to center
     await delay(1000)
 
     // 3. Pan Servo Sweeping Left to Right
-    console.log('Sweeping pan servo from left to right')
+    /*console.log('Sweeping pan servo from left to right')
     for (let pulse = 1000; pulse <= 2000; pulse += 250) {
       setServoPulse(panChannel, pulse)
       await delay(500) // Pause to observe each position
@@ -78,7 +78,7 @@ async function startServoTest() {
     setServoPulse(panChannel, 2000) // Move pan to right
     setServoPulse(tiltChannel, 1000) // Move tilt up
     await delay(1000)
-
+    */ 
     setServoPulse(panChannel, 1500) // Center pan
     setServoPulse(tiltChannel, 1500) // Center tilt
     await delay(1000)
