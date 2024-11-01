@@ -53,6 +53,9 @@ async function startServoTest() {
     setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
     await delay(5000)
     pwm.setDutyCycle(tiltChannel, 0.25);
+    await delay(5000)
+    pwm.setDutyCycle(panChannel, 0.85);
+    await delay(5000)
 
 
     // 1. Move Pan Servo Left and Right
