@@ -96,7 +96,7 @@ async function startServoTest() {
     await delay(1000)
     */ 
     setServoPulse(panChannel, 1500) // Center pan
-    setServoPulse(tiltChannel, 1500) // Center tilt
+    setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
     await delay(1000)
 
     console.log('Test movements completed.')
