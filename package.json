@@ -12,6 +12,7 @@
     "i2c-bus": "^5.2.3",
     "node-gpiod": "^1.0.2",
     "node-libgpiod": "^0.4.6",
+    "node-webcam": "^0.8.2",
     "onoff": "^6.0.3",
     "pca9685": "^5.0.0",
     "pigpio": "^3.3.1",
