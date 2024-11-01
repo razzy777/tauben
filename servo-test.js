@@ -1,45 +1,96 @@
-const i2cBus = require('i2c-bus');
-const Pca9685Driver = require('pca9685').Pca9685Driver;
+const i2cBus = require('i2c-bus')
+const Pca9685Driver = require('pca9685').Pca9685Driver
 
+// Configuration options for the PCA9685 servo driver
 const options = {
   i2c: i2cBus.openSync(1),
-  address: 0x40,
-  frequency: 50,
-  debug: false
-};
+  address: 0x40, // Default I2C address for PCA9685
+  frequency: 50, // Standard frequency for servos (50Hz)
+  debug: false,
+}
 
+// Initialize the PCA9685 servo driver
 const pwm = new Pca9685Driver(options, (err) => {
   if (err) {
-    console.error('Error initializing PCA9685');
-    process.exit(-1);
+    console.error('Error initializing PCA9685')
+    process.exit(-1)
   }
 
-  console.log('PCA9685 initialized');
+  console.log('PCA9685 initialized')
+  startServoTest()
+})
 
-  // Servo channels
-  const panChannel = 0;
-  const tiltChannel = 1;
+// Channels for the pan and tilt servos
+const panChannel = 0
+const tiltChannel = 1
 
-  // Function to set servo pulse length
-  function setServoPulse(channel, pulse) {
-    pwm.setPulseLength(channel, pulse);
+// Helper function to set servo pulse length
+function setServoPulse(channel, pulse) {
+  pwm.setPulseLength(channel, pulse)
+}
+
+// Helper function to add a delay
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Main function to execute the test movements
+async function startServoTest() {
+  try {
+    console.log('Centering both servos...')
+    setServoPulse(panChannel, 1500) // Center pan
+    setServoPulse(tiltChannel, 1500) // Center tilt
+    await delay(1000)
+
+    // 1. Move Pan Servo Left and Right
+    console.log('Testing pan servo: left, right, center')
+    setServoPulse(panChannel, 1000) // Move pan servo left
+    await delay(1000)
+    setServoPulse(panChannel, 2000) // Move pan servo right
+    await delay(1000)
+    setServoPulse(panChannel, 1500) // Return pan to center
+    await delay(1000)
+
+    // 2. Move Tilt Servo Up and Down
+    console.log('Testing tilt servo: up, down, center')
+    setServoPulse(tiltChannel, 1000) // Move tilt servo up
+    await delay(1000)
+    setServoPulse(tiltChannel, 2000) // Move tilt servo down
+    await delay(1000)
+    setServoPulse(tiltChannel, 1500) // Return tilt to center
+    await delay(1000)
+
+    // 3. Pan Servo Sweeping Left to Right
+    console.log('Sweeping pan servo from left to right')
+    for (let pulse = 1000; pulse <= 2000; pulse += 250) {
+      setServoPulse(panChannel, pulse)
+      await delay(500) // Pause to observe each position
+    }
+    setServoPulse(panChannel, 1500) // Return to center
+    await delay(1000)
+
+    // 4. Diagonal Movement: Bottom-Left to Top-Right
+    console.log('Diagonal movement: bottom-left to top-right')
+    setServoPulse(panChannel, 1000) // Move pan to left
+    setServoPulse(tiltChannel, 2000) // Move tilt down
+    await delay(1000)
+
+    setServoPulse(panChannel, 2000) // Move pan to right
+    setServoPulse(tiltChannel, 1000) // Move tilt up
+    await delay(1000)
+
+    setServoPulse(panChannel, 1500) // Center pan
+    setServoPulse(tiltChannel, 1500) // Center tilt
+    await delay(1000)
+
+    console.log('Test movements completed.')
+
+    // Cleanup: Turn off PWM output to stop any servo signals
+    pwm.dispose()
+    process.exit(0)
+  } catch (error) {
+    console.error('Error during servo test:', error)
+    pwm.dispose()
+    process.exit(1)
   }
-
-    // Center position (adjust pulse lengths as needed)
-    setServoPulse(panChannel, 2000);
-    setServoPulse(tiltChannel, 2000);
-
-    // Return to center
-    setServoPulse(panChannel, 1500); // Back to center
-    setServoPulse(tiltChannel, 1500);
-
-
-
-  // Add your test movements here
-
-  // Cleanup
-  setTimeout(() => {
-    pwm.dispose();
-    process.exit(0);
-  }, 5000);
-});
+}
