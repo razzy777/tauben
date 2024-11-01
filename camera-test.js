@@ -3,8 +3,8 @@ const path = require('path')
 const fs = require('fs')
 
 const opts = {
-	width: 4608,
-	height: 2592,
+	width: 1920, // or 1280
+	height: 1080, // or 720
 	delay: 0,
 	saveShots: true,
 	output: 'jpeg',
