@@ -24,10 +24,17 @@ const pwm = new Pca9685Driver(options, (err) => {
 const panChannel = 0
 const tiltChannel = 1
 
+const TILT_MAX_DOWN_PULSE = 1350
+const TILT_MAX_UP_PULSE = 2500
+const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE)/2)
+
 // Helper function to set servo pulse length
 function setServoPulse(channel, pulse) {
-    if (channel === 1 && pulse < 1350) {
-        console.log('Max. down tilt reached')
+    if (channel === 1 && pulse < TILT_MAX_DOWN_PULSE) {
+        console.log('TILT: Max. DOWN reached')
+        return false
+    } else if (channel === 1 && pulse > TILT_MAX_UP_PULSE) {
+        console.log('TILT: Max. UP reached')
         return false
     }
     pwm.setPulseLength(channel, pulse)
@@ -43,7 +50,7 @@ async function startServoTest() {
   try {
     console.log('Centering both servos...')
     //setServoPulse(panChannel, 1500) // Center pan
-    setServoPulse(tiltChannel, 2800) // Center tilt
+    setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
     await delay(10000)
 
     // 1. Move Pan Servo Left and Right
