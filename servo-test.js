@@ -25,9 +25,15 @@ const pwm = new Pca9685Driver(options, (err) => {
     pwm.setPulseLength(channel, pulse);
   }
 
-  // Center position (adjust pulse lengths as needed)
-  setServoPulse(panChannel, 1500);
-  setServoPulse(tiltChannel, 1500);
+    // Center position (adjust pulse lengths as needed)
+    setServoPulse(panChannel, 2000);
+    setServoPulse(tiltChannel, 2000);
+
+    // Return to center
+    setServoPulse(panChannel, 1500); // Back to center
+    setServoPulse(tiltChannel, 1500);
+
+
 
   // Add your test movements here
 
