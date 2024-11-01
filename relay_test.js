@@ -9,19 +9,8 @@ class ServoController {
     async init() {
         try {
             console.log(`Initializing servo on pin ${this.pin}...`);
-            // Force cleanup of any existing GPIO setup
-            try {
-                const cleanup = new Gpio(this.pin, 'out');
-                cleanup.unexport();
-                await this.delay(100); // Wait for cleanup
-            } catch (e) {
-                // Ignore cleanup errors
-            }
-            
             this.servo = new Gpio(this.pin, 'out');
-            // Ensure we start in a known state
-            await this.servo.write(0);
-            console.log('Servo initialized in OFF state');
+            console.log('Servo initialized');
         } catch (error) {
             console.error('Error initializing servo:', error);
             throw error;
@@ -31,9 +20,14 @@ class ServoController {
     async activate() {
         try {
             console.log('Activating servo...');
+            // First unexport
+            this.servo.unexport();
+            await this.delay(100);
+            
+            // Reinitialize and set high
+            this.servo = new Gpio(this.pin, 'out');
             await this.servo.write(1);
-            const state = await this.servo.read();
-            console.log('Servo state after activation:', state);
+            console.log('Servo activated');
         } catch (error) {
             console.error('Error activating servo:', error);
             throw error;
@@ -43,9 +37,14 @@ class ServoController {
     async deactivate() {
         try {
             console.log('Deactivating servo...');
+            // First unexport
+            this.servo.unexport();
+            await this.delay(100);
+            
+            // Reinitialize and set low
+            this.servo = new Gpio(this.pin, 'out');
             await this.servo.write(0);
-            const state = await this.servo.read();
-            console.log('Servo state after deactivation:', state);
+            console.log('Servo deactivated');
         } catch (error) {
             console.error('Error deactivating servo:', error);
             throw error;
@@ -60,24 +59,11 @@ class ServoController {
         try {
             if (this.servo) {
                 await this.deactivate();
-                await this.delay(100); // Wait before unexporting
                 this.servo.unexport();
                 console.log('Servo cleanup completed');
             }
         } catch (error) {
             console.error('Error during cleanup:', error);
-            throw error;
-        }
-    }
-
-    // Add a method to check current state
-    async getState() {
-        try {
-            const state = await this.servo.read();
-            console.log('Current servo state:', state);
-            return state;
-        } catch (error) {
-            console.error('Error reading servo state:', error);
             throw error;
         }
     }
@@ -92,18 +78,11 @@ async function testServoMovement() {
         for (let i = 0; i < 5; i++) {
             console.log(`\nMovement cycle ${i + 1}`);
             
-            // Activate
             await servo.activate();
-            await servo.getState();
             await servo.delay(1000);
             
-            // Deactivate
             await servo.deactivate();
-            await servo.getState();
             await servo.delay(1000);
-            
-            // Add a small delay between cycles
-            await servo.delay(500);
         }
     } catch (error) {
         console.error('Error during servo test:', error);
