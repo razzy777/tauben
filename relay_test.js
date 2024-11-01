@@ -1,21 +1,20 @@
-const Gpio = require('onoff').Gpio;
+const Gpio = require('pigpio').Gpio;
 
 try {
     console.log('Initializing GPIO 17...');
-    const relay = new Gpio(17, 'out');
+    // Configure GPIO17 as an output
+    const relay = new Gpio(17, {mode: Gpio.OUTPUT});
     
     console.log('Activating relay...');
-    relay.writeSync(1); // Activate relay
+    relay.digitalWrite(1); // Turn on
     
     setTimeout(() => {
         try {
             console.log('Deactivating relay...');
-            relay.writeSync(0); // Deactivate relay after 3 seconds
-            relay.unexport();
+            relay.digitalWrite(0); // Turn off
             console.log('Relay test completed');
         } catch (timeoutError) {
             console.error('Error in timeout callback:', timeoutError);
-            if (relay) relay.unexport();
         }
     }, 3000);
 } catch (error) {
