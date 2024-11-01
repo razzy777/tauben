@@ -26,7 +26,11 @@ const tiltChannel = 1
 
 // Helper function to set servo pulse length
 function setServoPulse(channel, pulse) {
-  pwm.setPulseLength(channel, pulse)
+    if (channel === 1 && pulse < 1350) {
+        console.log('Max. down tilt reached')
+        return false
+    }
+    pwm.setPulseLength(channel, pulse)
 }
 
 // Helper function to add a delay
@@ -39,7 +43,7 @@ async function startServoTest() {
   try {
     console.log('Centering both servos...')
     //setServoPulse(panChannel, 1500) // Center pan
-    setServoPulse(tiltChannel, 1350) // Center tilt
+    setServoPulse(tiltChannel, 1050) // Center tilt
     await delay(10000)
 
     // 1. Move Pan Servo Left and Right
