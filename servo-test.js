@@ -51,7 +51,9 @@ async function startServoTest() {
     console.log('Centering both servos...')
     //setServoPulse(panChannel, 1500) // Center pan
     setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
-    await delay(10000)
+    await delay(5000)
+    pwm.setDutyCycle(tiltChannel, 0.25);
+
 
     // 1. Move Pan Servo Left and Right
     console.log('Testing pan servo: left, right, center')
