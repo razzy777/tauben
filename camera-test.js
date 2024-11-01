@@ -1,66 +1,39 @@
-const PiCamera = require('pi-camera');
-const path = require('path');
-const fs = require('fs');
+const { exec } = require('child_process')
+const path = require('path')
+const fs = require('fs')
 
-class CameraController {
-   constructor(options = {}) {
-       // Default options
-       this.options = {
-           width: options.width || 1920,
-           height: options.height || 1080,
-           outputDir: options.outputDir || './images',
-           nopreview: true,
-           rotation: options.rotation || 0,
-           quality: options.quality || 100,
-       };
+// Define the folder path and image file path
+const folderPath = '/home/johannes/tauben/images'
+const imagePath = path.join(folderPath, 'test_picture.jpg')
 
-       // Ensure output directory exists
-       if (!fs.existsSync(this.options.outputDir)) {
-           console.log('Creating output directory:', this.options.outputDir);
-           fs.mkdirSync(this.options.outputDir, { recursive: true });
-       }
-   }
-
-   async takePhoto(filename) {
-       try {
-           const outputPath = path.join(this.options.outputDir, filename);
-           
-           const camera = new PiCamera({
-               mode: 'photo',
-               output: outputPath,
-               width: this.options.width,
-               height: this.options.height,
-               nopreview: this.options.nopreview,
-               rotation: this.options.rotation,
-               quality: this.options.quality
-           });
-
-           console.log('Taking photo...');
-           await camera.snap();
-           console.log('Photo saved to:', outputPath);
-           return outputPath;
-       } catch (error) {
-           console.error('Error taking photo:', error);
-           throw error;
-       }
-   }
+// Ensure the directory has correct permissions
+if (!fs.existsSync(folderPath)) {
+	console.log(`Creating directory at: ${folderPath}`)
+	fs.mkdirSync(folderPath, { recursive: true })
+	// Set full permissions to avoid permission issues
+	fs.chmodSync(folderPath, 0o777)
+} else {
+	console.log(`Directory exists at: ${folderPath}`)
+	fs.chmodSync(folderPath, 0o777) // Ensure permissions are set each time
 }
 
-// Example usage
-async function testCamera() {
-   const camera = new CameraController({
-       width: 1920,
-       height: 1080,
-       outputDir: './captures'
-   });
+// Capture image using `libcamera-still`
+function captureImage() {
+	// Command to capture image
+	const captureCommand = `libcamera-still -o ${imagePath} -t 1000 --width 1280 --height 720`
 
-   try {
-       const photoPath = await camera.takePhoto(`photo_${Date.now()}.jpg`);
-       console.log('Photo captured:', photoPath);
-   } catch (error) {
-       console.error('Camera test failed:', error);
-   }
+	// Execute the capture command
+	exec(captureCommand, (err, stdout, stderr) => {
+		if (err) {
+			console.error('Error capturing image:', err)
+			return
+		}
+		if (stderr) {
+			console.error('libcamera-still error:', stderr)
+		}
+		console.log('Image successfully captured and saved at:', imagePath)
+	})
 }
 
-// Run the test
-testCamera().catch(console.error);
+// Capture an image
+captureImage()
