@@ -1,13 +1,13 @@
-const Gpio = require('pigpio').Gpio;
+const Gpio = require('onoff').Gpio;
 
-const relay = new Gpio('GPIO17', { mode: Gpio.OUTPUT }); // Use the correct GPIO pin number
+const relay = new Gpio('gpio-588', 'out'); // GPIO 17 connected to IN1
 
 // Activate the relay (turn ON solenoid valve)
-relay.digitalWrite(1);
+relay.writeSync(1);
 
 // Wait for 5 seconds
 setTimeout(() => {
   // Deactivate the relay (turn OFF solenoid valve)
-  relay.digitalWrite(0);
-  process.exit(0); // Exit the script
+  relay.writeSync(0);
+  relay.unexport();
 }, 5000);

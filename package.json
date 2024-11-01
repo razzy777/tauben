@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "i2c-bus": "^5.2.3",
+    "node-libgpiod": "^0.4.6",
     "onoff": "^6.0.3",
     "pca9685": "^5.0.0",
     "pigpio": "^3.3.1",
