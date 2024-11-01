@@ -9,8 +9,19 @@ class ServoController {
     async init() {
         try {
             console.log(`Initializing servo on pin ${this.pin}...`);
+            // Force cleanup of any existing GPIO setup
+            try {
+                const cleanup = new Gpio(this.pin, 'out');
+                cleanup.unexport();
+                await this.delay(100); // Wait for cleanup
+            } catch (e) {
+                // Ignore cleanup errors
+            }
+            
             this.servo = new Gpio(this.pin, 'out');
-            console.log('Servo initialized');
+            // Ensure we start in a known state
+            await this.servo.write(0);
+            console.log('Servo initialized in OFF state');
         } catch (error) {
             console.error('Error initializing servo:', error);
             throw error;
@@ -21,7 +32,8 @@ class ServoController {
         try {
             console.log('Activating servo...');
             await this.servo.write(1);
-            console.log('Servo activated');
+            const state = await this.servo.read();
+            console.log('Servo state after activation:', state);
         } catch (error) {
             console.error('Error activating servo:', error);
             throw error;
@@ -32,7 +44,8 @@ class ServoController {
         try {
             console.log('Deactivating servo...');
             await this.servo.write(0);
-            console.log('Servo deactivated');
+            const state = await this.servo.read();
+            console.log('Servo state after deactivation:', state);
         } catch (error) {
             console.error('Error deactivating servo:', error);
             throw error;
@@ -47,6 +60,7 @@ class ServoController {
         try {
             if (this.servo) {
                 await this.deactivate();
+                await this.delay(100); // Wait before unexporting
                 this.servo.unexport();
                 console.log('Servo cleanup completed');
             }
@@ -55,40 +69,44 @@ class ServoController {
             throw error;
         }
     }
-}
 
-// Example usage functions
-async function testServo() {
-    const servo = new ServoController(588);
-    
-    try {
-        await servo.init();
-        await servo.activate();
-        await servo.delay(1000);
-        await servo.deactivate();
-    } catch (error) {
-        console.error('Error during servo test:', error);
-    } finally {
-        await servo.cleanup();
+    // Add a method to check current state
+    async getState() {
+        try {
+            const state = await this.servo.read();
+            console.log('Current servo state:', state);
+            return state;
+        } catch (error) {
+            console.error('Error reading servo state:', error);
+            throw error;
+        }
     }
 }
 
-// More complex movement pattern example
-async function servoPattern() {
+async function testServoMovement() {
     const servo = new ServoController(588);
     
     try {
         await servo.init();
         
-        // Pattern: on-off-on-off
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < 5; i++) {
+            console.log(`\nMovement cycle ${i + 1}`);
+            
+            // Activate
             await servo.activate();
-            await servo.delay(500);
+            await servo.getState();
+            await servo.delay(1000);
+            
+            // Deactivate
             await servo.deactivate();
+            await servo.getState();
+            await servo.delay(1000);
+            
+            // Add a small delay between cycles
             await servo.delay(500);
         }
     } catch (error) {
-        console.error('Error during servo pattern:', error);
+        console.error('Error during servo test:', error);
     } finally {
         await servo.cleanup();
     }
@@ -107,31 +125,6 @@ process.on('SIGINT', async () => {
     process.exit();
 });
 
-// You can now use either of these functions:
-// testServo().catch(console.error);
-// servoPattern().catch(console.error);
-
-// Or create your own custom patterns:
-async function customPattern() {
-    const servo = new ServoController(588);
-    
-    try {
-        await servo.init();
-        
-        // Your custom pattern here
-        await servo.activate();
-        await servo.delay(200);
-        await servo.deactivate();
-        await servo.delay(800);
-        await servo.activate();
-        await servo.delay(1000);
-        await servo.deactivate();
-    } catch (error) {
-        console.error('Error during custom pattern:', error);
-    } finally {
-        await servo.cleanup();
-    }
-}
-
-// Run your preferred pattern
-customPattern().catch(console.error);
+// Run the test
+console.log('Starting servo movement test...');
+testServoMovement().catch(console.error);
