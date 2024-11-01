@@ -1,7 +1,7 @@
 const Gpio = require('pigpio').Gpio;
 
 // Initialize GPIO pin (replace 17 with your actual GPIO pin number)
-const relay = new Gpio(17, { mode: Gpio.OUTPUT });
+const relay = new Gpio('GPIO17', { mode: Gpio.OUTPUT });
 
 console.log('Activating relay...');
 relay.digitalWrite(1); // Activate relay
