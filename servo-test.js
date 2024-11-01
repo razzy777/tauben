@@ -64,9 +64,9 @@ async function startServoTest() {
 
     // 2. Move Tilt Servo Up and Down
     console.log('Testing tilt servo: up, down, center')
-    setServoPulse(tiltChannel, 1000) // Move tilt servo up
+    setServoPulse(panChannel, 500) // Move tilt servo up
     await delay(1000)
-    setServoPulse(tiltChannel, 1500) // Move tilt servo down
+    setServoPulse(panChannel, 2500) // Move tilt servo down
     await delay(1000)
     setServoPulse(tiltChannel, 1600) // Return tilt to center
     await delay(1000)
