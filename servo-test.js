@@ -27,8 +27,8 @@ const tiltChannel = 1
 const TILT_MAX_DOWN_PULSE = 1350
 const TILT_MAX_UP_PULSE = 2500
 
-const PAN_MAX_RIGHT_PULSE = 1400
-const PAN_MAX_LEFT_PULSE = 1600
+const PAN_MAX_RIGHT_PULSE = 1200
+const PAN_MAX_LEFT_PULSE = 1800
 
 const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE)/2)
 const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE)/2)
@@ -109,6 +109,7 @@ async function startServoTest() {
     console.log('Test movements completed.')
     */
     // Cleanup: Turn off PWM output to stop any servo signals
+    console.log('CENTER')
     setServoPulse(panChannel, PAN_CENTER_PULSE) // Center pan
     setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
 
