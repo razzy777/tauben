@@ -99,7 +99,6 @@ async function startServoTest() {
     await delay(8000)
 
     pwm.dispose()
-    process.exit(0)
   } catch (error) {
     console.error('Error during servo test:', error)
     pwm.dispose()
