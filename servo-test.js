@@ -26,6 +26,10 @@ const tiltChannel = 1
 
 const TILT_MAX_DOWN_PULSE = 1350
 const TILT_MAX_UP_PULSE = 2500
+
+const PAN_MAX_LEFT_PULSE = 1400
+const PAN_MAX_RIGHT_PULSE = 1600
+
 const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE)/2)
 
 // Helper function to set servo pulse length
@@ -35,6 +39,12 @@ function setServoPulse(channel, pulse) {
         return false
     } else if (channel === 1 && pulse > TILT_MAX_UP_PULSE) {
         console.log('TILT: Max. UP reached')
+        return false
+    } else if (channel === 0 && pulse < PAN_MAX_LEFT_PULSE) {
+        console.log('PAN: Max. LEFT reached')
+        return false
+    } else if (channel === 0 && pulse > PAN_MAX_RIGHT_PULSE) {
+        console.log('PAN: Max. RIGHT reached')
         return false
     }
     pwm.setPulseLength(channel, pulse)
@@ -52,12 +62,6 @@ async function startServoTest() {
     //setServoPulse(panChannel, 1500) // Center pan
     setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
     await delay(5000)
-    pwm.setDutyCycle(tiltChannel, 0.25);
-    await delay(5000)
-    pwm.setDutyCycle(panChannel, 0.85);
-    await delay(5000)
-
-
     // 1. Move Pan Servo Left and Right
     console.log('Testing pan servo: left, right, center')
     //setServoPulse(panChannel, 1000) // Move pan servo left
@@ -69,12 +73,12 @@ async function startServoTest() {
 
     // 2. Move Tilt Servo Up and Down
     console.log('Testing tilt servo: up, down, center')
-    setServoPulse(panChannel, 500) // Move tilt servo up
+    setServoPulse(panChannel, 1400) // Move tilt servo up
     await delay(1000)
-    setServoPulse(panChannel, 2500) // Move tilt servo down
+    setServoPulse(panChannel, 1600) // Move tilt servo down
     await delay(1000)
-    setServoPulse(tiltChannel, 1600) // Return tilt to center
-    await delay(1000)
+    // setServoPulse(tiltChannel, 1600) // Return tilt to center
+    // await delay(1000)
 
     // 3. Pan Servo Sweeping Left to Right
     /*console.log('Sweeping pan servo from left to right')
@@ -94,13 +98,13 @@ async function startServoTest() {
     setServoPulse(panChannel, 2000) // Move pan to right
     setServoPulse(tiltChannel, 1000) // Move tilt up
     await delay(1000)
-    */ 
+    
     setServoPulse(panChannel, 1500) // Center pan
     setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
     await delay(1000)
 
     console.log('Test movements completed.')
-
+    */
     // Cleanup: Turn off PWM output to stop any servo signals
     pwm.dispose()
     process.exit(0)
