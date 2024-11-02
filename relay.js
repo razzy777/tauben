@@ -67,43 +67,35 @@ class ServoController {
             throw error;
         }
     }
-}
 
-async function testServoMovement() {
-    const servo = new ServoController(588);
-    
-    try {
-        await servo.init();
-        
-        for (let i = 0; i < 5; i++) {
-            console.log(`\nMovement cycle ${i + 1}`);
-            
-            await servo.activate();
-            await servo.delay(1000);
-            
-            await servo.deactivate();
-            await servo.delay(1000);
+    // Function to activate the relay for a specific time in milliseconds
+    async activateWater(duration) {
+        try {
+            await this.activate();
+            await this.delay(duration);
+            await this.deactivate();
+            console.log(`Relay activated for ${duration}ms`);
+        } catch (error) {
+            console.error('Error during activateWater:', error);
+            throw error;
         }
-    } catch (error) {
-        console.error('Error during servo test:', error);
-    } finally {
-        await servo.cleanup();
     }
 }
 
-// Handle Ctrl+C
-process.on('SIGINT', async () => {
-    console.log('\nReceived SIGINT. Cleaning up...');
-    try {
-        if (servo) {
-            await servo.cleanup();
-        }
-    } catch (error) {
-        console.error('Error during emergency cleanup:', error);
-    }
-    process.exit();
-});
+// Export the functions
+module.exports = {
+    ServoController,
+}
 
-// Run the test
-console.log('Starting servo movement test...');
-testServoMovement().catch(console.error);
+// Example usage (for testing purposes)
+// (async () => {
+//     const servo = new ServoController(588);
+//     try {
+//         await servo.init();
+//         await servo.activateWater(500);
+//     } catch (error) {
+//         console.error(error);
+//     } finally {
+//         await servo.cleanup();
+//     }
+// })();
