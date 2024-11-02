@@ -84,6 +84,18 @@ async function startServoTest() {
     setServoPulse(tiltChannel, TILT_MAX_DOWN_PULSE) // Move tilt servo down
 
     await delay(1000)
+
+    console.log('MAX RIGHT, MAX DOWN')
+    setServoPulse(panChannel, PAN_MAX_RIGHT_PULSE) // Move tilt servo down
+    setServoPulse(tiltChannel, TILT_MAX_DOWN_PULSE) // Move tilt servo down
+
+    await delay(1000)
+
+    console.log('MAX LEFT, MAX UP')
+    setServoPulse(panChannel, PAN_MAX_LEFT_PULSE) // Move tilt servo down
+    setServoPulse(tiltChannel, TILT_MAX_UP_PULSE) // Move tilt servo down
+
+    await delay(1000)
     // setServoPulse(tiltChannel, 1600) // Return tilt to center
     // await delay(1000)
 
