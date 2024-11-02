@@ -28,7 +28,7 @@ const TILT_MAX_DOWN_PULSE = 1350
 const TILT_MAX_UP_PULSE = 2500
 
 const PAN_MAX_RIGHT_PULSE = 1200
-const PAN_MAX_LEFT_PULSE = 2500
+const PAN_MAX_LEFT_PULSE = 2300
 
 const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE)/2)
 const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE)/2)
@@ -74,11 +74,15 @@ async function startServoTest() {
     //await delay(1000)
 
     // 2. Move Tilt Servo Up and Down
-    console.log('MAX RIGHT')
+    console.log('MAX RIGHT, MAX UP')
     setServoPulse(panChannel, PAN_MAX_RIGHT_PULSE) // Move tilt servo up
+    setServoPulse(tiltChannel, TILT_MAX_UP_PULSE) // Move tilt servo down
+
     await delay(1000)
-    console.log('MAX LEFT')
+    console.log('MAX LEFT, MAX DOWN')
     setServoPulse(panChannel, PAN_MAX_LEFT_PULSE) // Move tilt servo down
+    setServoPulse(tiltChannel, TILT_MAX_DOWN_PULSE) // Move tilt servo down
+
     await delay(1000)
     // setServoPulse(tiltChannel, 1600) // Return tilt to center
     // await delay(1000)
