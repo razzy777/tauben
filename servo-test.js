@@ -110,7 +110,7 @@ async function startServoTest() {
     */
     // Cleanup: Turn off PWM output to stop any servo signals
     console.log('CENTER')
-    setServoPulse(panChannel, PAN_CENTER_PULSE) // Center pan
+    setServoPulse(panChannel, 1500) // Center pan
     setServoPulse(tiltChannel, TILT_CENTER_PULSE) // Center tilt
     await delay(8000)
     pwm.dispose()
