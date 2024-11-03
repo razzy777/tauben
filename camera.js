@@ -1,73 +1,109 @@
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const chokidar = require('chokidar'); // Add this to your package.json
 
-// Define the folder path and image file path
+// Define the folder paths
 const folderPath = '/home/johannes/tauben/images';
-const imagePath = path.join(folderPath, 'test_picture.jpg');
+const streamPath = path.join(folderPath, 'stream');
+const currentFrame = path.join(streamPath, 'current.jpg');
 
-// Ensure the directory has correct permissions
-if (!fs.existsSync(folderPath)) {
-    console.log(`Creating directory at: ${folderPath}`);
-    fs.mkdirSync(folderPath, { recursive: true });
-    fs.chmodSync(folderPath, 0o777);
-} else {
-    console.log(`Directory exists at: ${folderPath}`);
-    fs.chmodSync(folderPath, 0o777);
+// Ensure the directories exist with correct permissions
+function ensureDirectories() {
+    [folderPath, streamPath].forEach(dir => {
+        if (!fs.existsSync(dir)) {
+            console.log(`Creating directory at: ${dir}`);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.chmodSync(dir, 0o777);
+        } else {
+            console.log(`Directory exists at: ${dir}`);
+            fs.chmodSync(dir, 0o777);
+        }
+    });
 }
 
-// Video stream process holder
-let videoProcess = null;
+// Clean up any existing stream files
+function cleanupStreamFiles() {
+    if (fs.existsSync(currentFrame)) {
+        fs.unlinkSync(currentFrame);
+    }
+}
 
-// Function to start video stream
+let streamProcess = null;
+let watcher = null;
+
 function startVideoStream(socket) {
-    if (videoProcess) {
-        console.log('Video stream already running');
+    if (streamProcess) {
+        console.log('Stream already running');
         return;
     }
 
-    console.log('Starting video stream...');
-    
-    // Command to start video stream
-    // Using libcamera-vid with raw output
-    videoProcess = spawn('libcamera-vid', [
-        '-t', '0',           // Run indefinitely
-        '--width', '640',    // Reduced width for better performance
-        '--height', '480',   // Reduced height for better performance
-        '--framerate', '15', // Lower framerate for better network performance
-        '--codec', 'mjpeg',  // Use MJPEG codec
-        '--output', '-'      // Output to stdout
+    ensureDirectories();
+    cleanupStreamFiles();
+
+    console.log('Starting camera stream...');
+
+    // Start raspistill in timelapse mode
+    streamProcess = spawn('raspistill', [
+        '-w', '640',          // Width
+        '-h', '480',          // Height
+        '-q', '10',           // Quality (lower number = higher quality)
+        '-o', currentFrame,   // Output file
+        '-tl', '200',         // Time between shots (ms)
+        '-t', '0',            // Run indefinitely
+        '-s',                 // No preview window
+        '-n'                  // No preview window
     ]);
 
-    videoProcess.stdout.on('data', (data) => {
-        // Convert the frame to base64 and emit to connected clients
-        const base64Frame = data.toString('base64');
-        socket.emit('videoFrame', base64Frame);
+    streamProcess.stderr.on('data', (data) => {
+        console.log('Stream output:', data.toString());
     });
 
-    videoProcess.stderr.on('data', (data) => {
-        console.error('Video stream error:', data.toString());
+    streamProcess.on('close', (code) => {
+        console.log('Stream process closed with code:', code);
+        streamProcess = null;
     });
 
-    videoProcess.on('close', (code) => {
-        console.log('Video stream process closed with code:', code);
-        videoProcess = null;
+    // Watch for file changes and emit to socket
+    watcher = chokidar.watch(currentFrame, {
+        persistent: true,
+        awaitWriteFinish: {
+            stabilityThreshold: 100,
+            pollInterval: 100
+        }
+    });
+
+    watcher.on('change', (path) => {
+        try {
+            const imageData = fs.readFileSync(currentFrame);
+            const base64Image = imageData.toString('base64');
+            socket.emit('videoFrame', base64Image);
+        } catch (error) {
+            console.error('Error reading frame:', error);
+        }
     });
 }
 
-// Function to stop video stream
 function stopVideoStream() {
-    if (videoProcess) {
-        videoProcess.kill();
-        videoProcess = null;
-        console.log('Video stream stopped');
+    if (streamProcess) {
+        streamProcess.kill();
+        streamProcess = null;
     }
+    
+    if (watcher) {
+        watcher.close();
+        watcher = null;
+    }
+
+    cleanupStreamFiles();
+    console.log('Stream stopped');
 }
 
-// Function to capture image
+// Original photo capture function
 async function captureImage() {
     return new Promise((resolve, reject) => {
-        const captureCommand = `libcamera-still -o ${imagePath} -t 1000 --width 1280 --height 720`;
+        const imagePath = path.join(folderPath, 'test_picture.jpg');
+        const captureCommand = `raspistill -o ${imagePath} -t 1000 --width 1280 --height 720`;
 
         exec(captureCommand, (err, stdout, stderr) => {
             if (err) {
@@ -75,7 +111,7 @@ async function captureImage() {
                 return;
             }
             if (stderr) {
-                console.error('libcamera-still error:', stderr);
+                console.error('raspistill error:', stderr);
             }
             console.log('Image successfully captured and saved at:', imagePath);
             resolve(imagePath);
@@ -83,8 +119,8 @@ async function captureImage() {
     });
 }
 
-// Function to remove the captured image
-async function removeImage() {
+// Original remove image function
+async function removeImage(imagePath) {
     return new Promise((resolve, reject) => {
         if (fs.existsSync(imagePath)) {
             fs.unlink(imagePath, (err) => {
