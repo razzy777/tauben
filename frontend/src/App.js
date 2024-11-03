@@ -7,7 +7,7 @@ function App() {
 
   useEffect(() => {
     // Initialize the socket connection
-    const newSocket = io('http://192.168.68.56:3000'); // Update with the correct backend address
+    const newSocket = io('http://localhost:3000'); // Update with the correct backend address
     
     // Set the socket in the state
     setSocket(newSocket);
