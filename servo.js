@@ -8,81 +8,65 @@ const options = {
   frequency: 50, // Standard frequency for servos (50Hz)
   debug: false,
 }
-
 let currentPositionServo = {
-  pan: null, 
-  tilt: null, 
-  commandQue: []
-}
+  pan: PAN_CENTER_PULSE,
+  tilt: TILT_CENTER_PULSE,
+  commandQue: [],
+  processing: false,
+};
 
-// Initialize the PCA9685 servo driver
-const pwm = new Pca9685Driver(options, (err) => {
-  if (err) {
-    console.error('Error initializing PCA9685')
-    process.exit(-1)
+// Function to start processing the queue
+async function processQueue() {
+  if (currentPositionServo.processing) {
+    return; // Already processing, so return
   }
 
-  console.log('PCA9685 initialized')
-})
+  currentPositionServo.processing = true;
 
-// Channels for the pan and tilt servos
-const panChannel = 0
-const tiltChannel = 1
+  while (currentPositionServo.commandQue.length > 0) {
+    const task = currentPositionServo.commandQue.shift(); // Get the first task from the queue
 
-const TILT_MAX_DOWN_PULSE = 1350
-const TILT_MAX_UP_PULSE = 2400
-
-const PAN_MAX_RIGHT_PULSE = 1200
-const PAN_MAX_LEFT_PULSE = 2000
-
-const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE) / 2)
-const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE) / 2)
-
-async function startServoPulse() {
-  while (true) {
-    if (currentPositionServo.commandQue.length > 0) {
-      let firstTask = currentPositionServo.commandQue.shift();
-      if (firstTask.channel === 1 && firstTask.pulse < TILT_MAX_DOWN_PULSE) {
-        console.log('TILT: Max. DOWN reached')
-        return false
-      } else if (firstTask.channel === 1 && firstTask.pulse > TILT_MAX_UP_PULSE) {
-        console.log('TILT: Max. UP reached')
-        return false
-      } else if (firstTask.channel === 0 && firstTask.pulse > PAN_MAX_LEFT_PULSE) {
-        console.log('PAN: Max. LEFT reached')
-        return false
-      } else if (firstTask.channel === 0 && firstTask.pulse < PAN_MAX_RIGHT_PULSE) {
-        console.log('PAN: Max. RIGHT reached')
-        return false
-      }
-    
-      // Update current servo position
-      if (firstTask.channel === 0) {
-        currentPositionServo.pan = firstTask.pulse
-      } else {
-        currentPositionServo.tilt = firstTask.pulse
-      }
-    
-      // Set the pulse length for the servo driver
-      pwm.setPulseLength(firstTask.channel, firstTask.pulse)
-    
-      // Introduce delay to allow servo to reach the desired position
-      // You may need to adjust this delay to fit the specific servo speed
-      await delay(1200) // 500ms delay is arbitrary, adjust based on your servo's speed    
+    try {
+      await setServoPulse(task.channel, task.pulse);
+    } catch (error) {
+      console.error('Error executing servo command:', error);
     }
   }
+
+  currentPositionServo.processing = false;
 }
 
+// Helper function to set servo pulse length and ensure it finishes before continuing
+async function setServoPulse(channel, pulse) {
+  if (channel === tiltChannel && pulse < TILT_MAX_DOWN_PULSE) {
+    console.log('TILT: Max. DOWN reached');
+    return false;
+  } else if (channel === tiltChannel && pulse > TILT_MAX_UP_PULSE) {
+    console.log('TILT: Max. UP reached');
+    return false;
+  } else if (channel === panChannel && pulse > PAN_MAX_LEFT_PULSE) {
+    console.log('PAN: Max. LEFT reached');
+    return false;
+  } else if (channel === panChannel && pulse < PAN_MAX_RIGHT_PULSE) {
+    console.log('PAN: Max. RIGHT reached');
+    return false;
+  }
 
-// Helper function to add a delay
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  // Update current position
+  if (channel === panChannel) {
+    currentPositionServo.pan = pulse;
+  } else if (channel === tiltChannel) {
+    currentPositionServo.tilt = pulse;
+  }
+
+  // Set the pulse length for the servo driver
+  await pwm.setPulseLength(channel, pulse);
+  await delay(500); // Add a delay to give time for the servo to reach the position
 }
 
 // Function to start the servo test, adding tasks to the queue
 async function startServoTest() {
   try {
-    startServoPulse()
     console.log('Centering both servos...');
     currentPositionServo.commandQue.push({ channel: tiltChannel, pulse: TILT_CENTER_PULSE }); // Center tilt
     currentPositionServo.commandQue.push({ channel: panChannel, pulse: PAN_CENTER_PULSE }); // Center pan
@@ -116,6 +100,9 @@ async function startServoTest() {
     console.log('CENTER');
     currentPositionServo.commandQue.push({ channel: panChannel, pulse: PAN_CENTER_PULSE });
     currentPositionServo.commandQue.push({ channel: tiltChannel, pulse: TILT_CENTER_PULSE });
+
+    // Start processing the queue
+    processQueue();
   } catch (error) {
     console.error('Error during servo test:', error);
     pwm.dispose();
@@ -140,6 +127,7 @@ async function moveToPosition(panPulse, tiltPulse) {
   }
   currentPositionServo.commandQue.push({ channel: panChannel, pulse: panPulse });
   currentPositionServo.commandQue.push({ channel: tiltChannel, pulse: tiltPulse });
+  processQueue();
 }
 
 // Function to move servos to a relative position, adding tasks to the queue
@@ -156,12 +144,12 @@ async function moveToPositionRelative(panPulseRel, tiltPulseRel) {
 
   currentPositionServo.commandQue.push({ channel: panChannel, pulse: newPan });
   currentPositionServo.commandQue.push({ channel: tiltChannel, pulse: newTilt });
+  processQueue();
 }
-
 
 // Function to generate a random pulse within a range
 function getRandomPulse(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 // Export the functions
@@ -170,15 +158,4 @@ module.exports = {
   centerServos,
   moveToPosition,
   moveToPositionRelative
-}
-
-// Example usage (for testing purposes)
-// (async () => {
-//   try {
-//     await startServoTest()
-//     await centerServos()
-//     await moveToPosition(1500, 1600)
-//   } catch (error) {
-//     console.error(error)
-//   }
-// })()
+};
