@@ -43,7 +43,7 @@ function App() {
 
   const moveServoRelative = (pan, tilt) => {
     if (socket) {
-      socket.emit('moveServo', { pan, tilt });
+      socket.emit('moveServoRelative', { pan, tilt });
     } else {
       console.error('Socket is not available');
     }
