@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import io from 'socket.io-client';
 import styled from 'styled-components';
+import JSMpeg from 'jsmpeg-player';
 
-// Styled Components
+// Your existing styled components remain the same
 const Container = styled.div`
   min-height: 100vh;
   background: linear-gradient(135deg, #1a1a1a 0%, #0a192f 100%);
@@ -143,41 +144,91 @@ const NoImage = styled.div`
   border-radius: 0.5rem;
   color: #94a3b8;
 `;
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import io from 'socket.io-client';
+import styled from 'styled-components';
+import JSMpeg from 'jsmpeg-player';
+
+// Your existing styled components remain the same
+const Container = styled.div`
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a1a 0%, #0a192f 100%);
+  padding: 2rem;
+  color: white;
+`;
+
+// ... (keep all your other styled components)
+
+// Add new styled component for video
+const VideoContainer = styled.div`
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  margin-bottom: 1rem;
+
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+  }
+`;
 
 function App() {
   const [detection, setDetection] = useState(null);
   const [socket, setSocket] = useState(null);
   const [keyStates, setKeyStates] = useState({});
   const [systemStatus, setSystemStatus] = useState(null);
+  const [videoFrame, setVideoFrame] = useState(null);
+  
+  const videoRef = useRef(null);
+  const playerRef = useRef(null);
 
   const MOVEMENT_AMOUNT = 10;
   const KEY_REPEAT_DELAY = 100;
 
-  const [videoFrame, setVideoFrame] = useState(null);
-
   useEffect(() => {
-      const newSocket = io('http://192.168.68.58:3000');
-      setSocket(newSocket);
+    const newSocket = io('http://192.168.68.58:3000');
+    setSocket(newSocket);
 
-      newSocket.on('detection', (data) => {
-        setDetection(data);
+    // Set up video player when socket is ready
+    if (videoRef.current && !playerRef.current) {
+      const canvas = document.createElement('canvas');
+      videoRef.current.appendChild(canvas);
+
+      // Create WebSocket connection for video
+      const wsUrl = 'ws://192.168.68.58:3000/video';
+      playerRef.current = new JSMpeg.Player(wsUrl, {
+        canvas: canvas,
+        audio: false,
+        pauseWhenHidden: false
       });
+    }
 
-      newSocket.on('servoStatus', (status) => {
-        setSystemStatus(status);
-      });
+    newSocket.on('detection', (data) => {
+      setDetection(data);
+    });
 
-      // Add video frame handler
-      newSocket.on('videoFrame', (frameData) => {
-        setVideoFrame(frameData);
-      });
+    newSocket.on('servoStatus', (status) => {
+      setSystemStatus(status);
+    });
 
-      return () => {
-        newSocket.off('detection');
-        newSocket.off('servoStatus');
-        newSocket.off('videoFrame');
-        newSocket.close();
-      };
+    newSocket.on('videoFrame', (frameData) => {
+      setVideoFrame(frameData);
+    });
+
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+      newSocket.off('detection');
+      newSocket.off('servoStatus');
+      newSocket.off('videoFrame');
+      newSocket.close();
+    };
   }, []);
 
   const moveServoRelative = useCallback((pan, tilt) => {
@@ -303,37 +354,43 @@ function App() {
 
         <ControlCard>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
-          <div style={{ position: 'relative', width: '100%', marginBottom: '1rem' }}>
-              {videoFrame ? (
-                  <img
-                      src={`data:image/jpeg;base64,${videoFrame}`}
-                      alt="Live Feed"
-                      style={{
-                          width: '100%',
-                          borderRadius: '0.5rem',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                      }}
-                  />
-              ) : (
-                  <NoImage>Waiting for video feed...</NoImage>
-              )}
-          </div>
           
-          {detection && detection.image && (
-              <div>
-                  <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
-                  <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
-                      Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
-                  </p>
-                  <ImageContainer>
-                      <img
-                          src={`data:image/jpeg;base64,${detection.image}`}
-                          alt="Capture"
-                      />
-                  </ImageContainer>
-              </div>
+          {/* Video Stream */}
+          <VideoContainer ref={videoRef}>
+            {!playerRef.current && <NoImage>Connecting to video feed...</NoImage>}
+          </VideoContainer>
+          
+          {/* Fallback to JPEG frames if MPEG stream fails */}
+          {!playerRef.current && videoFrame && (
+            <div style={{ position: 'relative', width: '100%', marginBottom: '1rem' }}>
+              <img
+                src={`data:image/jpeg;base64,${videoFrame}`}
+                alt="Live Feed"
+                style={{
+                  width: '100%',
+                  borderRadius: '0.5rem',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}
+              />
+            </div>
           )}
-      </ControlCard>
+          
+          {/* Captured Photo */}
+          {detection && detection.image && (
+            <div>
+              <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
+              <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+                Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
+              </p>
+              <ImageContainer>
+                <img
+                  src={`data:image/jpeg;base64,${detection.image}`}
+                  alt="Capture"
+                />
+              </ImageContainer>
+            </div>
+          )}
+        </ControlCard>
       </Panel>
     </Container>
   );
