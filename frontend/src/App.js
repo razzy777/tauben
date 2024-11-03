@@ -22,6 +22,32 @@ const Panel = styled.div`
   }
 `;
 
+const LiveFeedContainer = styled.div`
+    position: relative;
+    width: 100%;
+    margin-bottom: 1rem;
+    /* Add aspect ratio container to prevent layout shift */
+    &::before {
+        content: "";
+        display: block;
+        padding-top: 75%; /* 4:3 aspect ratio */
+    }
+`;
+
+const RotatedVideo = styled.img`
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: rotate(90deg); /* Adjust this value to 90, 180, or 270 as needed */
+    transform-origin: center center;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+
 const Title = styled.h1`
   text-align: center;
   font-size: 2.5rem;
@@ -302,38 +328,34 @@ function App() {
         </ControlCard>
 
         <ControlCard>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
-          <div style={{ position: 'relative', width: '100%', marginBottom: '1rem' }}>
-              {videoFrame ? (
-                  <img
-                      src={`data:image/jpeg;base64,${videoFrame}`}
-                      alt="Live Feed"
-                      style={{
-                          width: '100%',
-                          borderRadius: '0.5rem',
-                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                      }}
-                  />
-              ) : (
-                  <NoImage>Waiting for video feed...</NoImage>
-              )}
-          </div>
-          
-          {detection && detection.image && (
-              <div>
-                  <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
-                  <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
-                      Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
-                  </p>
-                  <ImageContainer>
-                      <img
-                          src={`data:image/jpeg;base64,${detection.image}`}
-                          alt="Capture"
-                      />
-                  </ImageContainer>
-              </div>
-          )}
-      </ControlCard>
+    <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
+    <LiveFeedContainer>
+        {videoFrame ? (
+            <RotatedVideo
+                src={`data:image/jpeg;base64,${videoFrame}`}
+                alt="Live Feed"
+            />
+        ) : (
+            <NoImage>Waiting for video feed...</NoImage>
+        )}
+    </LiveFeedContainer>
+    
+    {detection && detection.image && (
+        <div>
+            <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
+            <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+                Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
+            </p>
+            <ImageContainer>
+                <img
+                    src={`data:image/jpeg;base64,${detection.image}`}
+                    alt="Capture"
+                    style={{ transform: 'rotate(90deg)', transformOrigin: 'center center' }}
+                />
+            </ImageContainer>
+        </div>
+    )}
+  </ControlCard>
       </Panel>
     </Container>
   );
