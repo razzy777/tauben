@@ -24,8 +24,7 @@ async function initializeSystem() {
       console.log('Initializing system components...');
       
       // Check camera availability
-      const { checkCamera } = require('./camera');
-      const cameraAvailable = await checkCamera();
+      const cameraAvailable = false
       if (!cameraAvailable) {
         console.error('No camera available!');
         // You can choose to continue without camera or exit
