@@ -137,15 +137,17 @@ async function moveToPosition(panPulse, tiltPulse) {
 // Function to move servos to a specific position
 async function moveToPositionRelative(panPulseRel, tiltPulseRel) {
   let newPan = panPulseRel ? currentPositionServo.pan + panPulseRel : null
-  let newTilt = tiltPulseRel ? currentPositionServo.tile + tiltPulseRel : null
+  let newTilt = tiltPulseRel ? currentPositionServo.tilt + tiltPulseRel : null
   if (newPan && (newPan < PAN_MAX_RIGHT_PULSE || newPan > PAN_MAX_LEFT_PULSE)) {
     throw new Error('Pan pulse out of range')
   } else if (newPan) {
+    console.log('Now moving to new pan: ', newPan)
     setServoPulse(panChannel, newPan)
   }
   if (newTilt && (newTilt < TILT_MAX_DOWN_PULSE || newTilt > TILT_MAX_UP_PULSE)) {
     throw new Error('Tilt pulse out of range')
   } else if (newTilt) {
+    console.log('Now moving to new tilt: ', newTilt)
     setServoPulse(tiltChannel, newTilt)
   }
 }
