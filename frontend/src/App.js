@@ -6,46 +6,55 @@ function App() {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    const newSocket = io('http://192.168.68.56:3000');
+    // Initialize the socket connection
+    const newSocket = io('http://192.168.68.56:3000'); // Update with the correct backend address
+    
+    // Set the socket in the state
     setSocket(newSocket);
 
+    // Attach listener to socket once it is available
     newSocket.on('detection', (data) => {
       setDetection(data);
     });
 
+    // Clean up the socket connection
     return () => {
       newSocket.off('detection');
       newSocket.close();
     };
-  }, []);
+  }, []); // Empty dependency array so it only runs once
 
-  socket.on('connect', () => {
-    console.log('Successfully connected to the backend');
-  });
-  
-  socket.on('connect_error', (error) => {
-    console.error('Connection error:', error);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('Disconnected from server');
-  });
-  
-
+  // Only use socket when it is successfully connected
   const takePhoto = () => {
-    if (socket) socket.emit('takePhoto');
+    if (socket) {
+      socket.emit('takePhoto');
+    } else {
+      console.error('Socket is not available');
+    }
   };
 
   const moveServo = (pan, tilt) => {
-    if (socket) socket.emit('moveServo', { pan, tilt });
+    if (socket) {
+      socket.emit('moveServo', { pan, tilt });
+    } else {
+      console.error('Socket is not available');
+    }
   };
 
   const centerServo = () => {
-    if (socket) socket.emit('centerServo');
+    if (socket) {
+      socket.emit('centerServo');
+    } else {
+      console.error('Socket is not available');
+    }
   };
 
   const activateWater = (duration) => {
-    if (socket) socket.emit('activateWater', duration);
+    if (socket) {
+      socket.emit('activateWater', duration);
+    } else {
+      console.error('Socket is not available');
+    }
   };
 
   return (
