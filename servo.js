@@ -93,7 +93,7 @@ async function startServoTest() {
     await delay(1000)
 
     // Randomized movements within defined ranges
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 5; i++) {
       const randomPanPulse = getRandomPulse(PAN_MAX_LEFT_PULSE, PAN_MAX_RIGHT_PULSE)
       const randomTiltPulse = getRandomPulse(TILT_MAX_DOWN_PULSE, TILT_MAX_UP_PULSE)
 
