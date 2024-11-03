@@ -141,7 +141,7 @@ async function moveToPositionRelative(panPulseRel, tiltPulseRel) {
   if (newPan && (newPan < PAN_MAX_RIGHT_PULSE || newPan > PAN_MAX_LEFT_PULSE)) {
     throw new Error('Pan pulse out of range')
   } else if (newPan) {
-    setServoPulse(panChannel, panPulse)
+    setServoPulse(panChannel, newPan)
   }
   if (newTilt && (newTilt < TILT_MAX_DOWN_PULSE || newTilt > TILT_MAX_UP_PULSE)) {
     throw new Error('Tilt pulse out of range')
