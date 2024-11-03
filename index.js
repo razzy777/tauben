@@ -1,7 +1,7 @@
 const http = require('http');
 const socketIo = require('socket.io');
 const servoSystem = require('./servoSystem');
-const { captureImage, removeImage, startVideoStream, stopVideoStream } = require('./camera');
+const { captureImage, removeImage } = require('./camera');
 
 const { ServoController } = require('./relay');
 const fs = require('fs');
@@ -82,8 +82,6 @@ async function performInitialServoTest() {
 // Socket connection handler
 function handleSocketConnection(socket) {
   console.log('New client connected:', socket.id);
-
-  startVideoStream(socket);
 
 
   // Handle photo capture requests
