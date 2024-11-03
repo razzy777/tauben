@@ -153,23 +153,31 @@ function App() {
   const MOVEMENT_AMOUNT = 10;
   const KEY_REPEAT_DELAY = 100;
 
+  const [videoFrame, setVideoFrame] = useState(null);
+
   useEffect(() => {
-    const newSocket = io('http://192.168.68.58:3000');
-    setSocket(newSocket);
+      const newSocket = io('http://192.168.68.58:3000');
+      setSocket(newSocket);
 
-    newSocket.on('detection', (data) => {
-      setDetection(data);
-    });
+      newSocket.on('detection', (data) => {
+        setDetection(data);
+      });
 
-    newSocket.on('servoStatus', (status) => {
-      setSystemStatus(status);
-    });
+      newSocket.on('servoStatus', (status) => {
+        setSystemStatus(status);
+      });
 
-    return () => {
-      newSocket.off('detection');
-      newSocket.off('servoStatus');
-      newSocket.close();
-    };
+      // Add video frame handler
+      newSocket.on('videoFrame', (frameData) => {
+        setVideoFrame(frameData);
+      });
+
+      return () => {
+        newSocket.off('detection');
+        newSocket.off('servoStatus');
+        newSocket.off('videoFrame');
+        newSocket.close();
+      };
   }, []);
 
   const moveServoRelative = useCallback((pan, tilt) => {
@@ -295,24 +303,37 @@ function App() {
 
         <ControlCard>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
-          {detection ? (
-            <div>
-              <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
-                Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
-              </p>
-              {detection.image && (
-                <ImageContainer>
+          <div style={{ position: 'relative', width: '100%', marginBottom: '1rem' }}>
+              {videoFrame ? (
                   <img
-                    src={`data:image/jpeg;base64,${detection.image}`}
-                    alt="Capture"
+                      src={`data:image/jpeg;base64,${videoFrame}`}
+                      alt="Live Feed"
+                      style={{
+                          width: '100%',
+                          borderRadius: '0.5rem',
+                          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                      }}
                   />
-                </ImageContainer>
+              ) : (
+                  <NoImage>Waiting for video feed...</NoImage>
               )}
-            </div>
-          ) : (
-            <NoImage>No image captured yet</NoImage>
+          </div>
+          
+          {detection && detection.image && (
+              <div>
+                  <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
+                  <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+                      Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
+                  </p>
+                  <ImageContainer>
+                      <img
+                          src={`data:image/jpeg;base64,${detection.image}`}
+                          alt="Capture"
+                      />
+                  </ImageContainer>
+              </div>
           )}
-        </ControlCard>
+      </ControlCard>
       </Panel>
     </Container>
   );

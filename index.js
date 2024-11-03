@@ -1,9 +1,11 @@
 const http = require('http');
 const socketIo = require('socket.io');
 const servoSystem = require('./servoSystem');
-const { captureImage, removeImage } = require('./camera');
+const { captureImage, removeImage, startVideoStream, stopVideoStream } = require('./camera');
+
 const { ServoController } = require('./relay');
 const fs = require('fs');
+
 
 // Create the relay controller
 const relayController = new ServoController(588); // Replace with appropriate pin number
@@ -75,6 +77,9 @@ async function performInitialServoTest() {
 // Socket connection handler
 function handleSocketConnection(socket) {
   console.log('New client connected:', socket.id);
+
+  startVideoStream(socket);
+
 
   // Handle photo capture requests
   socket.on('takePhoto', async () => {
@@ -175,6 +180,7 @@ function handleSocketConnection(socket) {
 
   // Handle client disconnect
   socket.on('disconnect', () => {
+    stopVideoStream(); // Stop video stream when client disconnects
     console.log('Client disconnected:', socket.id);
   });
 }
