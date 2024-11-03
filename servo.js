@@ -161,6 +161,7 @@ module.exports = {
   startServoTest,
   centerServos,
   moveToPosition,
+  moveToPositionRelative
 }
 
 // Example usage (for testing purposes)
