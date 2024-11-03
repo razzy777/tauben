@@ -7,9 +7,8 @@ function App() {
   const [keyStates, setKeyStates] = useState({});
   const [systemStatus, setSystemStatus] = useState(null);
 
-  // Constants for movement
   const MOVEMENT_AMOUNT = 10;
-  const KEY_REPEAT_DELAY = 100; // ms between repeated movements when key is held
+  const KEY_REPEAT_DELAY = 100;
 
   useEffect(() => {
     const newSocket = io('http://192.168.68.58:3000');
@@ -36,12 +35,11 @@ function App() {
     }
   }, [socket]);
 
-  // Keyboard control setup with key holding support
   useEffect(() => {
     const keyIntervals = {};
     
     const handleKeyDown = (e) => {
-      if (keyStates[e.key]) return; // Already pressed
+      if (keyStates[e.key]) return;
       
       setKeyStates(prev => ({ ...prev, [e.key]: true }));
       
@@ -62,10 +60,7 @@ function App() {
         }
       };
 
-      // Initial movement
       moveBasedOnKey();
-      
-      // Setup interval for repeated movement
       keyIntervals[e.key] = setInterval(moveBasedOnKey, KEY_REPEAT_DELAY);
     };
 
@@ -99,108 +94,136 @@ function App() {
     if (socket) socket.emit('activateWater', 500);
   };
 
+  // Custom button component for better consistency
+  const ControlButton = ({ onClick, children, active, color = "blue" }) => (
+    <button
+      onClick={onClick}
+      className={`
+        w-16 h-16 rounded-xl font-bold text-2xl
+        flex items-center justify-center
+        shadow-lg active:shadow-md
+        transform active:scale-95 transition-all duration-150
+        ${active ? `bg-${color}-600 hover:bg-${color}-700` : `bg-${color}-500 hover:bg-${color}-600`}
+        text-white
+        focus:outline-none focus:ring-2 focus:ring-${color}-400 focus:ring-opacity-50
+      `}
+    >
+      {children}
+    </button>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Main Control Panel */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h1 className="text-2xl font-bold text-center mb-6">System Control Panel</h1>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-8">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold text-center mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+          System Control Panel
+        </h1>
 
-          {/* Control Grid */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            {/* Top row */}
-            <div></div>
-            <button
-              onClick={() => moveServoRelative(0, MOVEMENT_AMOUNT)}
-              className={`p-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center justify-center transition-colors
-                ${keyStates['ArrowUp'] ? 'bg-blue-700' : ''}`}
-            >
-              ▲
-            </button>
-            <div></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Left Column - Controls */}
+          <div className="bg-gray-800 rounded-2xl p-8 shadow-xl backdrop-blur-sm bg-opacity-50">
+            {/* Direction Controls */}
+            <div className="grid grid-cols-3 gap-4 mb-8 max-w-[280px] mx-auto">
+              <div></div>
+              <ControlButton 
+                onClick={() => moveServoRelative(0, MOVEMENT_AMOUNT)}
+                active={keyStates['ArrowUp']}
+              >
+                ▲
+              </ControlButton>
+              <div></div>
 
-            {/* Middle row */}
-            <button
-              onClick={() => moveServoRelative(MOVEMENT_AMOUNT, 0)}
-              className={`p-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center justify-center transition-colors
-                ${keyStates['ArrowLeft'] ? 'bg-blue-700' : ''}`}
-            >
-              ◄
-            </button>
-            <button
-              onClick={centerServo}
-              className="p-4 bg-gray-500 hover:bg-gray-600 text-white rounded-lg flex items-center justify-center transition-colors"
-            >
-              ⟲
-            </button>
-            <button
-              onClick={() => moveServoRelative(-MOVEMENT_AMOUNT, 0)}
-              className={`p-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center justify-center transition-colors
-                ${keyStates['ArrowRight'] ? 'bg-blue-700' : ''}`}
-            >
-              ►
-            </button>
+              <ControlButton
+                onClick={() => moveServoRelative(MOVEMENT_AMOUNT, 0)}
+                active={keyStates['ArrowLeft']}
+              >
+                ◄
+              </ControlButton>
+              <ControlButton
+                onClick={centerServo}
+                color="gray"
+              >
+                ⟲
+              </ControlButton>
+              <ControlButton
+                onClick={() => moveServoRelative(-MOVEMENT_AMOUNT, 0)}
+                active={keyStates['ArrowRight']}
+              >
+                ►
+              </ControlButton>
 
-            {/* Bottom row */}
-            <div></div>
-            <button
-              onClick={() => moveServoRelative(0, -MOVEMENT_AMOUNT)}
-              className={`p-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center justify-center transition-colors
-                ${keyStates['ArrowDown'] ? 'bg-blue-700' : ''}`}
-            >
-              ▼
-            </button>
-            <div></div>
-          </div>
+              <div></div>
+              <ControlButton
+                onClick={() => moveServoRelative(0, -MOVEMENT_AMOUNT)}
+                active={keyStates['ArrowDown']}
+              >
+                ▼
+              </ControlButton>
+              <div></div>
+            </div>
 
-          {/* Action buttons */}
-          <div className="flex justify-center gap-4">
-            <button
-              onClick={takePhoto}
-              className="p-4 bg-green-500 hover:bg-green-600 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
-            >
-              📸 Take Photo
-            </button>
-            <button
-              onClick={activateWater}
-              className="p-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
-            >
-              💧 Activate Water
-            </button>
-          </div>
+            {/* Action Buttons */}
+            <div className="flex justify-center gap-4 mb-8">
+              <button
+                onClick={takePhoto}
+                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl
+                          text-white font-semibold shadow-lg active:shadow-md
+                          transform active:scale-95 transition-all duration-150
+                          focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-opacity-50"
+              >
+                📸 Take Photo
+              </button>
+              <button
+                onClick={activateWater}
+                className="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-xl
+                          text-white font-semibold shadow-lg active:shadow-md
+                          transform active:scale-95 transition-all duration-150
+                          focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-50"
+              >
+                💧 Water
+              </button>
+            </div>
 
-          {/* Status Display */}
-          {systemStatus && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-semibold mb-2">System Status</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>Pan Queue: {systemStatus.panQueueLength}</div>
-                <div>Tilt Queue: {systemStatus.tiltQueueLength}</div>
-                <div>Pan Position: {systemStatus.currentPosition?.pan}</div>
-                <div>Tilt Position: {systemStatus.currentPosition?.tilt}</div>
+            {/* Status Display */}
+            {systemStatus && (
+              <div className="bg-gray-700 rounded-xl p-4">
+                <h3 className="text-lg font-semibold mb-3 text-blue-300">System Status</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm text-gray-300">
+                  <div className="bg-gray-800 p-2 rounded">Pan Queue: {systemStatus.panQueueLength}</div>
+                  <div className="bg-gray-800 p-2 rounded">Tilt Queue: {systemStatus.tiltQueueLength}</div>
+                  <div className="bg-gray-800 p-2 rounded">Pan: {systemStatus.currentPosition?.pan}</div>
+                  <div className="bg-gray-800 p-2 rounded">Tilt: {systemStatus.currentPosition?.tilt}</div>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Photo Display */}
-        {detection && (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Latest Capture</h2>
-            <div className="space-y-4">
-              <p className="text-gray-600">
-                Timestamp: {new Date(detection.timestamp).toLocaleTimeString()}
-              </p>
-              {detection.image && (
-                <img
-                  src={`data:image/jpeg;base64,${detection.image}`}
-                  alt="Capture"
-                  className="w-full rounded-lg shadow-md"
-                />
-              )}
-            </div>
+            )}
           </div>
-        )}
+
+          {/* Right Column - Photo Display */}
+          <div className="bg-gray-800 rounded-2xl p-8 shadow-xl backdrop-blur-sm bg-opacity-50">
+            <h2 className="text-2xl font-bold mb-4 text-blue-300">Camera Feed</h2>
+            {detection ? (
+              <div className="space-y-4">
+                <p className="text-gray-400">
+                  Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
+                </p>
+                {detection.image && (
+                  <div className="relative group">
+                    <img
+                      src={`data:image/jpeg;base64,${detection.image}`}
+                      alt="Capture"
+                      className="w-full h-auto rounded-xl shadow-lg"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"></div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-gray-500">
+                No image captured yet
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
