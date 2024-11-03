@@ -1,109 +1,200 @@
 const http = require('http');
 const socketIo = require('socket.io');
-const { startServoTest, centerServos, moveToPosition, moveToPositionRelative } = require('./servo');
+const servoSystem = require('./servoSystem');
 const { captureImage, removeImage } = require('./camera');
 const { ServoController } = require('./relay');
+const fs = require('fs');
 
-let relayController = new ServoController(588); // Replace with appropriate pin number
+// Create the relay controller
+const relayController = new ServoController(588); // Replace with appropriate pin number
 
 // Create server
 const server = http.createServer();
 const io = socketIo(server, {
   cors: {
-    origin: "*", // Replace "*" with your frontend domain in production for better security
+    origin: "*", // Replace with your frontend domain in production
     methods: ["GET", "POST"]
   }
 });
 
-server.listen(3000, async () => {
-  console.log('Socket server running on port 3000');
-
-  // Initialize components
+// Initialize components and start server
+async function initializeSystem() {
   try {
-    await relayController.init();
-    console.log('Starting servo test...');
-    await startServoTest();
-    console.log('Initialization completed, waiting for commands from frontend.');
-  } catch (error) {
-    console.error('Initialization error:', error);
-  }
-});
+    console.log('Initializing system components...');
+    
+    // Initialize servo system
+    await servoSystem.initialize();
+    console.log('Servo system initialized');
 
-// Handle incoming socket connections
-io.on('connection', (socket) => {
+    // Initialize relay controller
+    await relayController.init();
+    console.log('Relay controller initialized');
+
+    // Perform initial servo test
+    await performInitialServoTest();
+    
+    // Start the server
+    server.listen(3000, () => {
+      console.log('Socket server running on port 3000');
+      console.log('System initialization complete, ready for commands');
+    });
+  } catch (error) {
+    console.error('System initialization failed:', error);
+    process.exit(1);
+  }
+}
+
+// Perform initial servo movement test
+async function performInitialServoTest() {
+  console.log('Performing initial servo test...');
+  
+  // Center the servos
+  servoSystem.centerServos();
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // Test extreme positions
+  const testPositions = [
+    // Test maximum ranges
+    { pan: servoSystem.PAN_MAX_RIGHT_PULSE, tilt: servoSystem.TILT_MAX_UP_PULSE },
+    { pan: servoSystem.PAN_MAX_LEFT_PULSE, tilt: servoSystem.TILT_MAX_DOWN_PULSE },
+    { pan: servoSystem.PAN_MAX_RIGHT_PULSE, tilt: servoSystem.TILT_MAX_DOWN_PULSE },
+    { pan: servoSystem.PAN_MAX_LEFT_PULSE, tilt: servoSystem.TILT_MAX_UP_PULSE },
+    // Return to center
+    { pan: servoSystem.PAN_CENTER_PULSE, tilt: servoSystem.TILT_CENTER_PULSE }
+  ];
+
+  for (const position of testPositions) {
+    servoSystem.moveToPosition(position.pan, position.tilt);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+  }
+
+  console.log('Initial servo test completed');
+}
+
+// Socket connection handler
+function handleSocketConnection(socket) {
   console.log('New client connected:', socket.id);
 
+  // Handle photo capture requests
   socket.on('takePhoto', async () => {
     try {
       console.log('Taking photo...');
       const imagePath = await captureImage();
-      const imageData = require('fs').readFileSync(imagePath);
+      const imageData = fs.readFileSync(imagePath);
       const base64Image = imageData.toString('base64');
-      // Send result to the requesting client
+      
       socket.emit('detection', {
         detected: true,
         timestamp: Date.now(),
         image: base64Image,
       });
-      console.log('Photo taken and sent to frontend.');
-      await removeImage();
+      
+      console.log('Photo taken and sent to frontend');
+      await removeImage(imagePath);
     } catch (error) {
       console.error('Error taking photo:', error);
+      socket.emit('error', { message: 'Failed to take photo' });
     }
   });
 
-  socket.on('moveServo', async ({ pan, tilt }) => {
+  // Handle absolute servo movement
+  socket.on('moveServo', ({ pan, tilt }) => {
     try {
       console.log(`Moving servo to position: pan=${pan}, tilt=${tilt}`);
-      await moveToPosition(pan, tilt);
-      console.log('Servo moved to requested position.');
+      servoSystem.moveToPosition(pan, tilt);
+      socket.emit('servoMoved', { success: true });
     } catch (error) {
       console.error('Error moving servo:', error);
+      socket.emit('error', { message: 'Failed to move servo' });
     }
   });
 
-  socket.on('moveServoRelative', async ({ pan, tilt }) => {
+  // Handle relative servo movement
+  socket.on('moveServoRelative', ({ pan, tilt }) => {
     try {
-      console.log(`Moving servo to RELATIVE position: pan=${pan}, tilt=${tilt}`);
-      await moveToPositionRelative(pan, tilt);
-      console.log('Servo moved to requested position.');
+      console.log(`Moving servo relatively: pan=${pan}, tilt=${tilt}`);
+      servoSystem.moveToPositionRelative(pan, tilt);
+      socket.emit('servoMoved', { success: true });
     } catch (error) {
-      console.error('Error moving servo:', error);
+      console.error('Error moving servo relatively:', error);
+      socket.emit('error', { message: 'Failed to move servo' });
     }
   });
 
-  socket.on('centerServo', async () => {
+  // Handle servo centering
+  socket.on('centerServo', () => {
     try {
       console.log('Centering servos...');
-      await centerServos();
-      console.log('Servos centered.');
+      servoSystem.centerServos();
+      socket.emit('servoCentered', { success: true });
     } catch (error) {
       console.error('Error centering servos:', error);
+      socket.emit('error', { message: 'Failed to center servos' });
     }
   });
 
+  // Handle water activation
   socket.on('activateWater', async (duration) => {
     try {
-      console.log(`Activating water for ${duration} ms...`);
+      console.log(`Activating water for ${duration}ms...`);
       await relayController.activateWater(duration);
-      console.log('Water activation completed.');
+      socket.emit('waterActivated', { success: true });
+      console.log('Water activation completed');
     } catch (error) {
       console.error('Error activating water:', error);
+      socket.emit('error', { message: 'Failed to activate water' });
     }
   });
 
+  // Handle client disconnect
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });
+}
+
+// Set up socket connection handling
+io.on('connection', handleSocketConnection);
+
+// Error handling for uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
 });
 
-// Handle Ctrl+C
-process.on('SIGINT', async () => {
-  console.log('\nReceived SIGINT. Cleaning up...');
+// Error handling for unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Graceful shutdown handler
+async function handleShutdown() {
+  console.log('\nShutting down...');
+  
   try {
+    // Cleanup servo system
+    await servoSystem.cleanup();
+    console.log('Servo system cleaned up');
+
+    // Cleanup relay controller
     await relayController.cleanup();
+    console.log('Relay controller cleaned up');
+
+    // Close server
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
   } catch (error) {
-    console.error('Error during emergency cleanup:', error);
+    console.error('Error during shutdown:', error);
+    process.exit(1);
   }
-  process.exit();
+}
+
+// Handle termination signals
+process.on('SIGINT', handleShutdown);
+process.on('SIGTERM', handleShutdown);
+
+// Start the system
+initializeSystem().catch(error => {
+  console.error('Failed to start system:', error);
+  process.exit(1);
 });
