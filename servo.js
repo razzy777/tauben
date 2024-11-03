@@ -37,7 +37,6 @@ const PAN_MAX_LEFT_PULSE = 2000
 const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE) / 2)
 const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE) / 2)
 
-// Helper function to set servo pulse length
 async function setServoPulse(channel, pulse) {
   if (channel === 1 && pulse < TILT_MAX_DOWN_PULSE) {
     console.log('TILT: Max. DOWN reached')
@@ -52,13 +51,22 @@ async function setServoPulse(channel, pulse) {
     console.log('PAN: Max. RIGHT reached')
     return false
   }
+
+  // Update current servo position
   if (channel === 0) {
     currentPositionServo.pan = pulse
-  } else  {
+  } else {
     currentPositionServo.tilt = pulse
   }
-  await pwm.setPulseLength(channel, pulse)
+
+  // Set the pulse length for the servo driver
+  pwm.setPulseLength(channel, pulse)
+
+  // Introduce delay to allow servo to reach the desired position
+  // You may need to adjust this delay to fit the specific servo speed
+  await delay(500) // 500ms delay is arbitrary, adjust based on your servo's speed
 }
+
 
 // Helper function to add a delay
 function delay(ms) {
