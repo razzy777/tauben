@@ -64,7 +64,7 @@ async function setServoPulse(channel, pulse) {
 
   // Introduce delay to allow servo to reach the desired position
   // You may need to adjust this delay to fit the specific servo speed
-  await delay(800) // 500ms delay is arbitrary, adjust based on your servo's speed
+  await delay(1000) // 500ms delay is arbitrary, adjust based on your servo's speed
 }
 
 
@@ -101,7 +101,7 @@ async function startServoTest() {
     await delay(1000)
 
     // Randomized movements within defined ranges
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 2; i++) {
       const randomPanPulse = getRandomPulse(PAN_MAX_LEFT_PULSE, PAN_MAX_RIGHT_PULSE)
       const randomTiltPulse = getRandomPulse(TILT_MAX_DOWN_PULSE, TILT_MAX_UP_PULSE)
 
