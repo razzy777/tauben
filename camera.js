@@ -1,4 +1,4 @@
-const { exec, spawn } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -23,65 +23,7 @@ function ensureDirectories() {
 
 let streamProcess = null;
 
-// Function to find a valid capture device
-async function findCaptureDevice() {
-    return new Promise((resolve) => {
-        exec('v4l2-ctl --list-devices', (error, stdout) => {
-            if (error) {
-                console.error('Error listing devices:', error);
-                resolve(null);
-                return;
-            }
-
-            const devices = [];
-            let currentDevice = '';
-            const lines = stdout.split('\n');
-
-            for (const line of lines) {
-                if (line.includes('/dev/video')) {
-                    const device = line.trim();
-                    devices.push(device);
-                }
-            }
-
-            // Test each device for capture capability
-            const testDevice = async (index) => {
-                if (index >= devices.length) {
-                    resolve(null);
-                    return;
-                }
-
-                const device = devices[index];
-                exec(`v4l2-ctl --device=${device} --all`, async (err, stdout) => {
-                    if (!err && stdout.includes('Video Capture')) {
-                        // Additional verification
-                        try {
-                            const caps = await new Promise((res) => {
-                                exec(`v4l2-ctl --device=${device} --list-formats-ext`, (e, out) => {
-                                    if (e) res(false);
-                                    else res(out);
-                                });
-                            });
-                            
-                            if (caps && (caps.includes('MJPG') || caps.includes('YUYV'))) {
-                                console.log(`Found valid capture device: ${device}`);
-                                resolve(device);
-                                return;
-                            }
-                        } catch (e) {
-                            console.log(`Error checking capabilities for ${device}:`, e);
-                        }
-                    }
-                    testDevice(index + 1);
-                });
-            };
-
-            testDevice(0);
-        });
-    });
-}
-
-async function startVideoStream(socket) {
+function startVideoStream(socket) {
     if (streamProcess) {
         console.log('Stream already running');
         return;
@@ -90,70 +32,122 @@ async function startVideoStream(socket) {
     ensureDirectories();
     console.log('Starting camera stream...');
 
-    const device = await findCaptureDevice();
-    if (!device) {
-        console.error('No suitable camera device found');
+    // Try different approaches in sequence
+    tryStreamMethods(socket, 0);
+}
+
+function tryStreamMethods(socket, methodIndex) {
+    const streamMethods = [
+        // Method 1: libcamera-vid
+        {
+            command: 'libcamera-vid',
+            args: [
+                '--inline',
+                '--width', '640',
+                '--height', '480',
+                '--framerate', '15',
+                '--codec', 'mjpeg',
+                '--output', '-'
+            ]
+        },
+        // Method 2: raspi-still in timelapse mode
+        {
+            command: 'raspistill',
+            args: [
+                '-w', '640',
+                '-h', '480',
+                '-q', '10',
+                '-tl', '200',
+                '-t', '0',
+                '-o', currentFrame,
+                '-n'
+            ]
+        }
+    ];
+
+    if (methodIndex >= streamMethods.length) {
+        console.error('All streaming methods failed');
         return;
     }
 
-    console.log(`Using camera device: ${device}`);
+    const method = streamMethods[methodIndex];
+    console.log(`Trying streaming method ${methodIndex + 1} using ${method.command}`);
 
-    // Get supported formats
-    const formats = await new Promise((resolve) => {
-        exec(`v4l2-ctl --device=${device} --list-formats-ext`, (error, stdout) => {
-            resolve(stdout);
+    try {
+        streamProcess = spawn(method.command, method.args);
+        let frameBuffer = Buffer.alloc(0);
+
+        streamProcess.stdout?.on('data', (data) => {
+            if (method.command === 'libcamera-vid') {
+                frameBuffer = Buffer.concat([frameBuffer, data]);
+                
+                // Look for JPEG markers
+                while (frameBuffer.length > 2) {
+                    const startIndex = frameBuffer.indexOf(Buffer.from([0xff, 0xd8]));
+                    const endIndex = frameBuffer.indexOf(Buffer.from([0xff, 0xd9]));
+                    
+                    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+                        const frame = frameBuffer.slice(startIndex, endIndex + 2);
+                        socket.emit('videoFrame', frame.toString('base64'));
+                        frameBuffer = frameBuffer.slice(endIndex + 2);
+                    } else {
+                        break;
+                    }
+                }
+            }
         });
-    });
 
-    // Determine the best format to use
-    const useYUYV = formats.includes('YUYV');
-    const inputFormat = useYUYV ? 'yuyv422' : 'mjpeg';
-    
-    const ffmpegArgs = [
-        '-f', 'video4linux2',
-        '-input_format', inputFormat,
-        '-video_size', '640x480',
-        '-i', device
-    ];
+        if (method.command === 'raspistill') {
+            // Watch the output file for changes
+            const watcher = fs.watch(currentFrame, (eventType) => {
+                if (eventType === 'change') {
+                    try {
+                        const frame = fs.readFileSync(currentFrame);
+                        socket.emit('videoFrame', frame.toString('base64'));
+                    } catch (error) {
+                        // Ignore read errors during file writes
+                    }
+                }
+            });
 
-    if (useYUYV) {
-        ffmpegArgs.push(
-            '-vf', 'fps=5',  // Limit framerate for YUYV
-            '-pix_fmt', 'yuv420p'  // Convert to common format
-        );
+            // Store watcher reference for cleanup
+            streamProcess.watcher = watcher;
+        }
+
+        streamProcess.stderr?.on('data', (data) => {
+            console.log('Stream output:', data.toString());
+        });
+
+        streamProcess.on('error', (error) => {
+            console.error(`Failed to start ${method.command}:`, error);
+            streamProcess = null;
+            // Try next method
+            tryStreamMethods(socket, methodIndex + 1);
+        });
+
+        streamProcess.on('close', (code) => {
+            console.log(`${method.command} process closed with code ${code}`);
+            if (streamProcess?.watcher) {
+                streamProcess.watcher.close();
+            }
+            streamProcess = null;
+            
+            // If process exits immediately, try next method
+            if (code !== 0) {
+                tryStreamMethods(socket, methodIndex + 1);
+            }
+        });
+    } catch (error) {
+        console.error(`Error starting ${method.command}:`, error);
+        tryStreamMethods(socket, methodIndex + 1);
     }
-
-    ffmpegArgs.push(
-        '-f', 'mpegts',
-        '-codec:v', 'mpeg1video',
-        '-b:v', '800k',
-        '-bf', '0',
-        '-'
-    );
-
-    streamProcess = spawn('ffmpeg', ffmpegArgs);
-
-    streamProcess.stdout.on('data', (data) => {
-        socket.emit('videoData', data);
-    });
-
-    streamProcess.stderr.on('data', (data) => {
-        console.log('Stream info:', data.toString());
-    });
-
-    streamProcess.on('close', (code) => {
-        console.log('Stream process closed with code:', code);
-        streamProcess = null;
-    });
-
-    streamProcess.on('error', (err) => {
-        console.error('Stream process error:', err);
-        streamProcess = null;
-    });
 }
 
 function stopVideoStream() {
     if (streamProcess) {
+        if (streamProcess.watcher) {
+            streamProcess.watcher.close();
+        }
         streamProcess.kill();
         streamProcess = null;
     }
@@ -161,32 +155,40 @@ function stopVideoStream() {
 }
 
 async function captureImage() {
-    return new Promise(async (resolve, reject) => {
-        const device = await findCaptureDevice();
-        if (!device) {
-            reject(new Error('No suitable camera device found'));
-            return;
-        }
-
+    return new Promise((resolve, reject) => {
         const imagePath = path.join(folderPath, 'test_picture.jpg');
         
-        const captureProcess = spawn('ffmpeg', [
-            '-f', 'video4linux2',
-            '-i', device,
-            '-frames:v', '1',
-            '-y',
-            imagePath
+        // Try libcamera-still first
+        const captureProcess = spawn('libcamera-still', [
+            '-o', imagePath,
+            '--width', '1280',
+            '--height', '720',
+            '--nopreview'
         ]);
 
         captureProcess.stderr.on('data', (data) => {
-            console.log('Capture info:', data.toString());
+            console.log('Capture output:', data.toString());
         });
 
         captureProcess.on('close', (code) => {
             if (code === 0 && fs.existsSync(imagePath)) {
                 resolve(imagePath);
             } else {
-                reject(new Error(`Capture failed with code ${code}`));
+                // If libcamera-still fails, try raspistill
+                const raspistillProcess = spawn('raspistill', [
+                    '-o', imagePath,
+                    '-w', '1280',
+                    '-h', '720',
+                    '-n'
+                ]);
+
+                raspistillProcess.on('close', (code2) => {
+                    if (code2 === 0 && fs.existsSync(imagePath)) {
+                        resolve(imagePath);
+                    } else {
+                        reject(new Error('Both capture methods failed'));
+                    }
+                });
             }
         });
     });
@@ -210,8 +212,14 @@ async function removeImage(imagePath) {
 }
 
 async function checkCamera() {
-    const device = await findCaptureDevice();
-    return !!device;
+    return new Promise((resolve) => {
+        // Try a test capture
+        const testProcess = spawn('libcamera-still', ['--list-cameras']);
+        
+        testProcess.on('close', (code) => {
+            resolve(code === 0);
+        });
+    });
 }
 
 module.exports = {
