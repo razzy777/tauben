@@ -1,7 +1,6 @@
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const chokidar = require('chokidar');
 
 // Define the folder paths
 const folderPath = '/home/johannes/tauben/images';
@@ -33,17 +32,42 @@ async function startVideoStream(socket) {
     ensureDirectories();
     console.log('Starting camera stream...');
 
-    // Using libcamera-vid with MJPEG output
-    streamProcess = spawn('libcamera-vid', [
-        '--camera', '0',           // First camera
-        '--codec', 'mjpeg',        // Use MJPEG codec
-        '--width', '640',          // Width
-        '--height', '480',         // Height
-        '--framerate', '10',       // Reduced framerate for stability
-        '--inline',                // Output frames immediately
-        '--output', '-',           // Output to stdout
-        '--nopreview',             // No preview window
-        '--timeout', '0'           // Run indefinitely
+    // Try to find the correct video device
+    const videoDevices = [
+        '/dev/video20',  // Try the first PISP device
+        '/dev/video21',
+        '/dev/video22',
+        '/dev/video23'
+    ];
+
+    let workingDevice = null;
+    for (const device of videoDevices) {
+        try {
+            // Test if we can capture from this device
+            await exec(`v4l2-ctl --device=${device} --all`);
+            console.log(`Found working camera device: ${device}`);
+            workingDevice = device;
+            break;
+        } catch (error) {
+            console.log(`Device ${device} not suitable:`, error.message);
+        }
+    }
+
+    if (!workingDevice) {
+        console.error('No suitable camera device found');
+        return;
+    }
+
+    // Use ffmpeg to capture frames from the video device
+    streamProcess = spawn('ffmpeg', [
+        '-f', 'video4linux2',
+        '-input_format', 'mjpeg',  // Try MJPEG first
+        '-video_size', '640x480',
+        '-i', workingDevice,
+        '-vf', 'fps=5',  // Limit to 5 FPS
+        '-f', 'image2pipe',
+        '-vcodec', 'mjpeg',
+        '-'
     ]);
 
     let buffer = Buffer.alloc(0);
@@ -76,7 +100,7 @@ async function startVideoStream(socket) {
     });
 
     streamProcess.stderr.on('data', (data) => {
-        console.error('Stream error:', data.toString());
+        console.log('Stream info:', data.toString());
     });
 
     streamProcess.on('close', (code) => {
@@ -99,30 +123,52 @@ function stopVideoStream() {
 }
 
 async function captureImage() {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         const imagePath = path.join(folderPath, 'test_picture.jpg');
-        const captureCommand = spawn('libcamera-still', [
-            '--camera', '0',
-            '--width', '1280',
-            '--height', '720',
-            '--output', imagePath,
-            '--nopreview'
+        
+        // Try to find a working video device
+        const videoDevices = ['/dev/video20', '/dev/video21', '/dev/video22', '/dev/video23'];
+        let workingDevice = null;
+        
+        for (const device of videoDevices) {
+            try {
+                await exec(`v4l2-ctl --device=${device} --all`);
+                workingDevice = device;
+                break;
+            } catch (error) {
+                console.log(`Device ${device} not suitable for capture`);
+            }
+        }
+
+        if (!workingDevice) {
+            reject(new Error('No suitable camera device found'));
+            return;
+        }
+
+        // Use ffmpeg to capture a single frame
+        const captureProcess = spawn('ffmpeg', [
+            '-f', 'video4linux2',
+            '-input_format', 'mjpeg',
+            '-video_size', '1280x720',
+            '-i', workingDevice,
+            '-frames:v', '1',
+            '-y',  // Overwrite output file
+            imagePath
         ]);
 
-        captureCommand.stderr.on('data', (data) => {
-            console.log('Capture output:', data.toString());
+        captureProcess.stderr.on('data', (data) => {
+            console.log('Capture info:', data.toString());
         });
 
-        captureCommand.on('close', (code) => {
-            if (code === 0) {
-                console.log('Image captured successfully');
+        captureProcess.on('close', (code) => {
+            if (code === 0 && fs.existsSync(imagePath)) {
                 resolve(imagePath);
             } else {
                 reject(new Error(`Capture failed with code ${code}`));
             }
         });
 
-        captureCommand.on('error', (err) => {
+        captureProcess.on('error', (err) => {
             reject(new Error(`Capture process error: ${err.message}`));
         });
     });
@@ -140,26 +186,34 @@ async function removeImage(imagePath) {
                 resolve();
             });
         } else {
-            resolve(); // Don't reject if file doesn't exist
+            resolve();
         }
     });
 }
 
-// Function to check if the camera is available
 async function checkCamera() {
-    return new Promise((resolve) => {
-        exec('v4l2-ctl --list-devices', (error, stdout, stderr) => {
-            if (error) {
-                console.error('Error checking camera:', error);
-                resolve(false);
-                return;
-            }
+    return new Promise(async (resolve) => {
+        try {
+            // Check for ffmpeg installation
+            await exec('which ffmpeg');
             
-            // Check if PISP devices are present
-            const hasPisp = stdout.includes('pispbe');
-            console.log('Camera check result:', stdout);
-            resolve(hasPisp);
-        });
+            // Try to find a working video device
+            const videoDevices = ['/dev/video20', '/dev/video21', '/dev/video22', '/dev/video23'];
+            for (const device of videoDevices) {
+                try {
+                    await exec(`v4l2-ctl --device=${device} --all`);
+                    console.log(`Found working camera device: ${device}`);
+                    resolve(true);
+                    return;
+                } catch (error) {
+                    console.log(`Device ${device} not suitable`);
+                }
+            }
+            resolve(false);
+        } catch (error) {
+            console.error('Camera check failed:', error);
+            resolve(false);
+        }
     });
 }
 
