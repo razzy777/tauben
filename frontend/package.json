@@ -4,6 +4,9 @@
   "private": true,
   "dependencies": {
     "@craco/craco": "^7.1.0",
+    "@emotion/react": "^11.13.3",
+    "@emotion/styled": "^11.13.0",
+    "@mui/material": "^6.1.6",
     "@radix-ui/react-slot": "^1.1.0",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
@@ -14,6 +17,7 @@
     "react-dom": "^18.3.1",
     "react-scripts": "5.0.1",
     "socket.io-client": "^4.8.1",
+    "styled-components": "^6.1.13",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

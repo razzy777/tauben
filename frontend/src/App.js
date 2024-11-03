@@ -1,5 +1,148 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import io from 'socket.io-client';
+import styled from 'styled-components';
+
+// Styled Components
+const Container = styled.div`
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a1a 0%, #0a192f 100%);
+  padding: 2rem;
+  color: white;
+`;
+
+const Panel = styled.div`
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const Title = styled.h1`
+  text-align: center;
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  color: #64ffda;
+  text-shadow: 0 0 10px rgba(100, 255, 218, 0.3);
+`;
+
+const ControlCard = styled.div`
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const ControlGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  max-width: 300px;
+  margin: 0 auto 2rem auto;
+`;
+
+const DirectionButton = styled.button`
+  background: ${props => props.active ? '#3b82f6' : '#2563eb'};
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  &:hover {
+    background: #1d4ed8;
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  ${props => props.center && `
+    background: #4b5563;
+    &:hover {
+      background: #374151;
+    }
+  `}
+`;
+
+const ActionButton = styled.button`
+  background: ${props => props.water ? '#06b6d4' : '#10b981'};
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  &:hover {
+    background: ${props => props.water ? '#0891b2' : '#059669'};
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const ActionButtonContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+`;
+
+const StatusGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1rem;
+  border-radius: 0.5rem;
+`;
+
+const StatusItem = styled.div`
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #94a3b8;
+`;
+
+const ImageContainer = styled.div`
+  position: relative;
+  margin-top: 1rem;
+  
+  img {
+    width: 100%;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const NoImage = styled.div`
+  height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.5rem;
+  color: #94a3b8;
+`;
 
 function App() {
   const [detection, setDetection] = useState(null);
@@ -57,6 +200,8 @@ function App() {
           case 'ArrowRight':
             moveServoRelative(-MOVEMENT_AMOUNT, 0);
             break;
+          default:
+            break;
         }
       };
 
@@ -82,150 +227,94 @@ function App() {
     };
   }, [moveServoRelative, keyStates]);
 
-  const takePhoto = () => {
-    if (socket) socket.emit('takePhoto');
-  };
-
-  const centerServo = () => {
-    if (socket) socket.emit('centerServo');
-  };
-
-  const activateWater = () => {
-    if (socket) socket.emit('activateWater', 500);
-  };
-
-  // Custom button component for better consistency
-  const ControlButton = ({ onClick, children, active, color = "blue" }) => (
-    <button
-      onClick={onClick}
-      className={`
-        w-16 h-16 rounded-xl font-bold text-2xl
-        flex items-center justify-center
-        shadow-lg active:shadow-md
-        transform active:scale-95 transition-all duration-150
-        ${active ? `bg-${color}-600 hover:bg-${color}-700` : `bg-${color}-500 hover:bg-${color}-600`}
-        text-white
-        focus:outline-none focus:ring-2 focus:ring-${color}-400 focus:ring-opacity-50
-      `}
-    >
-      {children}
-    </button>
-  );
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-center mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-          System Control Panel
-        </h1>
+    <Container>
+      <Title>System Control Panel</Title>
+      <Panel>
+        <ControlCard>
+          <ControlGrid>
+            <div />
+            <DirectionButton 
+              onClick={() => moveServoRelative(0, MOVEMENT_AMOUNT)}
+              active={keyStates['ArrowUp']}
+            >
+              ▲
+            </DirectionButton>
+            <div />
+            
+            <DirectionButton
+              onClick={() => moveServoRelative(MOVEMENT_AMOUNT, 0)}
+              active={keyStates['ArrowLeft']}
+            >
+              ◄
+            </DirectionButton>
+            <DirectionButton
+              onClick={() => socket?.emit('centerServo')}
+              center
+            >
+              ⟲
+            </DirectionButton>
+            <DirectionButton
+              onClick={() => moveServoRelative(-MOVEMENT_AMOUNT, 0)}
+              active={keyStates['ArrowRight']}
+            >
+              ►
+            </DirectionButton>
+            
+            <div />
+            <DirectionButton
+              onClick={() => moveServoRelative(0, -MOVEMENT_AMOUNT)}
+              active={keyStates['ArrowDown']}
+            >
+              ▼
+            </DirectionButton>
+            <div />
+          </ControlGrid>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Left Column - Controls */}
-          <div className="bg-gray-800 rounded-2xl p-8 shadow-xl backdrop-blur-sm bg-opacity-50">
-            {/* Direction Controls */}
-            <div className="grid grid-cols-3 gap-4 mb-8 max-w-[280px] mx-auto">
-              <div></div>
-              <ControlButton 
-                onClick={() => moveServoRelative(0, MOVEMENT_AMOUNT)}
-                active={keyStates['ArrowUp']}
-              >
-                ▲
-              </ControlButton>
-              <div></div>
+          <ActionButtonContainer>
+            <ActionButton onClick={() => socket?.emit('takePhoto')}>
+              📸 Take Photo
+            </ActionButton>
+            <ActionButton 
+              onClick={() => socket?.emit('activateWater', 500)}
+              water
+            >
+              💧 Water
+            </ActionButton>
+          </ActionButtonContainer>
 
-              <ControlButton
-                onClick={() => moveServoRelative(MOVEMENT_AMOUNT, 0)}
-                active={keyStates['ArrowLeft']}
-              >
-                ◄
-              </ControlButton>
-              <ControlButton
-                onClick={centerServo}
-                color="gray"
-              >
-                ⟲
-              </ControlButton>
-              <ControlButton
-                onClick={() => moveServoRelative(-MOVEMENT_AMOUNT, 0)}
-                active={keyStates['ArrowRight']}
-              >
-                ►
-              </ControlButton>
+          {systemStatus && (
+            <StatusGrid>
+              <StatusItem>Pan Queue: {systemStatus.panQueueLength}</StatusItem>
+              <StatusItem>Tilt Queue: {systemStatus.tiltQueueLength}</StatusItem>
+              <StatusItem>Pan: {systemStatus.currentPosition?.pan}</StatusItem>
+              <StatusItem>Tilt: {systemStatus.currentPosition?.tilt}</StatusItem>
+            </StatusGrid>
+          )}
+        </ControlCard>
 
-              <div></div>
-              <ControlButton
-                onClick={() => moveServoRelative(0, -MOVEMENT_AMOUNT)}
-                active={keyStates['ArrowDown']}
-              >
-                ▼
-              </ControlButton>
-              <div></div>
+        <ControlCard>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
+          {detection ? (
+            <div>
+              <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+                Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
+              </p>
+              {detection.image && (
+                <ImageContainer>
+                  <img
+                    src={`data:image/jpeg;base64,${detection.image}`}
+                    alt="Capture"
+                  />
+                </ImageContainer>
+              )}
             </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-center gap-4 mb-8">
-              <button
-                onClick={takePhoto}
-                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl
-                          text-white font-semibold shadow-lg active:shadow-md
-                          transform active:scale-95 transition-all duration-150
-                          focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-opacity-50"
-              >
-                📸 Take Photo
-              </button>
-              <button
-                onClick={activateWater}
-                className="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-xl
-                          text-white font-semibold shadow-lg active:shadow-md
-                          transform active:scale-95 transition-all duration-150
-                          focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-50"
-              >
-                💧 Water
-              </button>
-            </div>
-
-            {/* Status Display */}
-            {systemStatus && (
-              <div className="bg-gray-700 rounded-xl p-4">
-                <h3 className="text-lg font-semibold mb-3 text-blue-300">System Status</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm text-gray-300">
-                  <div className="bg-gray-800 p-2 rounded">Pan Queue: {systemStatus.panQueueLength}</div>
-                  <div className="bg-gray-800 p-2 rounded">Tilt Queue: {systemStatus.tiltQueueLength}</div>
-                  <div className="bg-gray-800 p-2 rounded">Pan: {systemStatus.currentPosition?.pan}</div>
-                  <div className="bg-gray-800 p-2 rounded">Tilt: {systemStatus.currentPosition?.tilt}</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column - Photo Display */}
-          <div className="bg-gray-800 rounded-2xl p-8 shadow-xl backdrop-blur-sm bg-opacity-50">
-            <h2 className="text-2xl font-bold mb-4 text-blue-300">Camera Feed</h2>
-            {detection ? (
-              <div className="space-y-4">
-                <p className="text-gray-400">
-                  Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
-                </p>
-                {detection.image && (
-                  <div className="relative group">
-                    <img
-                      src={`data:image/jpeg;base64,${detection.image}`}
-                      alt="Capture"
-                      className="w-full h-auto rounded-xl shadow-lg"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"></div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="h-64 flex items-center justify-center text-gray-500">
-                No image captured yet
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+          ) : (
+            <NoImage>No image captured yet</NoImage>
+          )}
+        </ControlCard>
+      </Panel>
+    </Container>
   );
 }
 
