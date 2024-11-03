@@ -5,7 +5,6 @@ const { captureImage, removeImage } = require('./camera');
 const { ServoController } = require('./relay');
 
 let relayController = new ServoController(588); // Replace with appropriate pin number
-let servoLock = false
 
 // Create server
 const server = http.createServer();
@@ -64,19 +63,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('moveServoRelative', async ({ pan, tilt }) => {
-    if (servoLock) {
-        console.log('Servo is currently busy. Please wait for the current movement to complete.');
-        return;
-    }
-    servoLock = true; // Acquire the lock    
     try {
       console.log(`Moving servo to RELATIVE position: pan=${pan}, tilt=${tilt}`);
       await moveToPositionRelative(pan, tilt);
       console.log('Servo moved to requested position.');
     } catch (error) {
       console.error('Error moving servo:', error);
-    } finally {
-        servoLock = false; // Release the lock after the operation completes
     }
   });
 
