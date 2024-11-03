@@ -1,7 +1,7 @@
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const chokidar = require('chokidar'); // Add this to your package.json
+const chokidar = require('chokidar');
 
 // Define the folder paths
 const folderPath = '/home/johannes/tauben/images';
@@ -43,16 +43,15 @@ function startVideoStream(socket) {
 
     console.log('Starting camera stream...');
 
-    // Start raspistill in timelapse mode
-    streamProcess = spawn('raspistill', [
-        '-w', '640',          // Width
-        '-h', '480',          // Height
-        '-q', '10',           // Quality (lower number = higher quality)
-        '-o', currentFrame,   // Output file
-        '-tl', '200',         // Time between shots (ms)
-        '-t', '0',            // Run indefinitely
-        '-s',                 // No preview window
-        '-n'                  // No preview window
+    // Start libcamera-still in timelapse mode
+    streamProcess = spawn('libcamera-still', [
+        '--width', '640',     // Width
+        '--height', '480',    // Height
+        '--quality', '10',    // Quality (lower number = higher quality)
+        '--output', currentFrame,  // Output file
+        '--timelapse', '200', // Time between shots (ms)
+        '--timeout', '0',     // Run indefinitely
+        '--nopreview'         // No preview window
     ]);
 
     streamProcess.stderr.on('data', (data) => {
@@ -62,6 +61,10 @@ function startVideoStream(socket) {
     streamProcess.on('close', (code) => {
         console.log('Stream process closed with code:', code);
         streamProcess = null;
+    });
+
+    streamProcess.on('error', (err) => {
+        console.error('Stream process error:', err);
     });
 
     // Watch for file changes and emit to socket
@@ -99,11 +102,11 @@ function stopVideoStream() {
     console.log('Stream stopped');
 }
 
-// Original photo capture function
+// Update photo capture function to use libcamera-still
 async function captureImage() {
     return new Promise((resolve, reject) => {
         const imagePath = path.join(folderPath, 'test_picture.jpg');
-        const captureCommand = `raspistill -o ${imagePath} -t 1000 --width 1280 --height 720`;
+        const captureCommand = `libcamera-still -o ${imagePath} -t 1000 --width 1280 --height 720`;
 
         exec(captureCommand, (err, stdout, stderr) => {
             if (err) {
@@ -111,7 +114,7 @@ async function captureImage() {
                 return;
             }
             if (stderr) {
-                console.error('raspistill error:', stderr);
+                console.error('libcamera-still error:', stderr);
             }
             console.log('Image successfully captured and saved at:', imagePath);
             resolve(imagePath);
@@ -119,7 +122,6 @@ async function captureImage() {
     });
 }
 
-// Original remove image function
 async function removeImage(imagePath) {
     return new Promise((resolve, reject) => {
         if (fs.existsSync(imagePath)) {
@@ -137,9 +139,25 @@ async function removeImage(imagePath) {
     });
 }
 
+// Add a utility function to check if camera is available
+async function checkCamera() {
+    return new Promise((resolve) => {
+        exec('libcamera-still --list-cameras', (error, stdout, stderr) => {
+            if (error) {
+                console.error('Error checking camera:', error);
+                resolve(false);
+                return;
+            }
+            // Check if camera is found in output
+            resolve(!stderr.includes('no cameras available'));
+        });
+    });
+}
+
 module.exports = {
     captureImage,
     removeImage,
     startVideoStream,
-    stopVideoStream
+    stopVideoStream,
+    checkCamera
 };

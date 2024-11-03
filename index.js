@@ -19,34 +19,40 @@ const io = socketIo(server, {
   }
 });
 
-// Initialize components and start server
 async function initializeSystem() {
-  try {
-    console.log('Initializing system components...');
-    
-    // Initialize servo system
-    await servoSystem.initialize();
-    console.log('Servo system initialized');
-
-    // Initialize relay controller
-    await relayController.init();
-    console.log('Relay controller initialized');
-
-    // Perform initial servo test
-    
-    //await performInitialServoTest();
-    
-    // Start the server
-    server.listen(3000, () => {
-      console.log('Socket server running on port 3000');
-      console.log('System initialization complete, ready for commands');
-    });
-  } catch (error) {
-    console.error('System initialization failed:', error);
-    process.exit(1);
+    try {
+      console.log('Initializing system components...');
+      
+      // Check camera availability
+      const { checkCamera } = require('./camera');
+      const cameraAvailable = await checkCamera();
+      if (!cameraAvailable) {
+        console.error('No camera available!');
+        // You can choose to continue without camera or exit
+        // process.exit(1);
+      } else {
+        console.log('Camera detected and available');
+      }
+  
+      // Initialize servo system
+      await servoSystem.initialize();
+      console.log('Servo system initialized');
+  
+      // Initialize relay controller
+      await relayController.init();
+      console.log('Relay controller initialized');
+      
+      // Start the server
+      server.listen(3000, () => {
+        console.log('Socket server running on port 3000');
+        console.log('System initialization complete, ready for commands');
+      });
+    } catch (error) {
+      console.error('System initialization failed:', error);
+      process.exit(1);
+    }
   }
-}
-
+  
 // Perform initial servo movement test
 async function performInitialServoTest() {
   console.log('Performing initial servo test...');
