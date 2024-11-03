@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "chokidar": "^4.0.1",
     "i2c-bus": "^5.2.3",
     "node-gpiod": "^1.0.2",
     "node-libgpiod": "^0.4.6",
