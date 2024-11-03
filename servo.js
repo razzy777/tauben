@@ -46,6 +46,7 @@ async function startServoPulse() {
       let firstTask = currentPositionServo.commandQue.shift();
       try {
         // Execute the command
+        console.log('exec com', firstTask.channel, firstTask.pulse)
         await executeServoCommand(firstTask.channel, firstTask.pulse);
       } catch (error) {
         console.error('Error executing servo command:', error);
