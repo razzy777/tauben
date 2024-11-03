@@ -9,7 +9,21 @@ let relayController = new ServoController(588); // Replace with appropriate pin 
 
 // Create server
 const server = http.createServer();
-const io = socketIo(server);
+const io = socketIo(server, {
+    cors: {
+      origin: "*", // This should be restricted to the actual frontend domain for production
+      methods: ["GET", "POST"]
+    }
+  });
+io.on('connection', (socket) => {
+    console.log('New client connected:', socket.id);
+
+    socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
+    });
+});
+  
+
 
 server.listen(3000, async () => {
   console.log('Socket server running on port 3000');

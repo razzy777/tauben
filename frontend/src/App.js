@@ -3,32 +3,49 @@ import io from 'socket.io-client';
 
 function App() {
   const [detection, setDetection] = useState(null);
-  const socket = io('http://192.168.68.56:3000');
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    socket.on('detection', (data) => {
+    const newSocket = io('http://192.168.68.56:3000');
+    setSocket(newSocket);
+
+    newSocket.on('detection', (data) => {
       setDetection(data);
     });
 
     return () => {
-      socket.off('detection');
+      newSocket.off('detection');
+      newSocket.close();
     };
   }, []);
 
+  socket.on('connect', () => {
+    console.log('Successfully connected to the backend');
+  });
+  
+  socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Disconnected from server');
+  });
+  
+
   const takePhoto = () => {
-    socket.emit('takePhoto');
+    if (socket) socket.emit('takePhoto');
   };
 
   const moveServo = (pan, tilt) => {
-    socket.emit('moveServo', { pan, tilt });
+    if (socket) socket.emit('moveServo', { pan, tilt });
   };
 
   const centerServo = () => {
-    socket.emit('centerServo');
+    if (socket) socket.emit('centerServo');
   };
 
   const activateWater = (duration) => {
-    socket.emit('activateWater', duration);
+    if (socket) socket.emit('activateWater', duration);
   };
 
   return (
