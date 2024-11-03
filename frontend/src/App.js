@@ -32,19 +32,45 @@ const LiveFeedContainer = styled.div`
         padding-top: 56.25%; /* 16:9 aspect ratio */
     }
     overflow: hidden;
+    border-radius: 0.5rem;
 `;
 
 const RotatedVideo = styled.img`
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 133.33%; /* Compensate for rotation to maintain aspect ratio */
-    height: 75%; /* Adjust this to control zoom level */
+    width: 177.77%; /* 16:9 ratio compensation for rotation */
+    height: 100%;
     object-fit: cover;
     transform: translate(-50%, -50%) rotate(90deg);
     transform-origin: center;
-    border-radius: 0.5rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+// Replace your current ImageContainer with this:
+const ImageContainer = styled.div`
+    position: relative;
+    margin-top: 1rem;
+    
+    &::before {
+        content: "";
+        display: block;
+        padding-top: 56.25%; /* 16:9 aspect ratio */
+    }
+    overflow: hidden;
+    border-radius: 0.5rem;
+    
+    img {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 177.77%;
+        height: 100%;
+        object-fit: cover;
+        transform: translate(-50%, -50%) rotate(90deg);
+        transform-origin: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
 `;
 
 
@@ -151,41 +177,23 @@ const StatusItem = styled.div`
   color: #94a3b8;
 `;
 
-const ImageContainer = styled.div`
-    position: relative;
-    margin-top: 1rem;
-    
-    &::before {
-        content: "";
-        display: block;
-        padding-top: 56.25%; /* 16:9 aspect ratio */
-    }
-    overflow: hidden;
-    
-    img {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 133.33%;
-        height: 75%;
-        object-fit: cover;
-        border-radius: 0.5rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        transform: translate(-50%, -50%) rotate(90deg);
-        transform-origin: center;
-    }
-`;
 
 
+// Update your NoImage component to match the container:
 const NoImage = styled.div`
-  height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 0.5rem;
-  color: #94a3b8;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0.5rem;
+    color: #94a3b8;
 `;
+
 
 function App() {
   const [detection, setDetection] = useState(null);
