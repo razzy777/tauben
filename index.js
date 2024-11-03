@@ -5,6 +5,7 @@ const { captureImage, removeImage } = require('./camera');
 const { ServoController } = require('./relay');
 
 let relayController = new ServoController(588); // Replace with appropriate pin number
+let servoLock = false
 
 // Create server
 const server = http.createServer();
