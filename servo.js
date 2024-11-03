@@ -38,7 +38,7 @@ const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE) /
 const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE) / 2)
 
 // Helper function to set servo pulse length
-function setServoPulse(channel, pulse) {
+async function setServoPulse(channel, pulse) {
   if (channel === 1 && pulse < TILT_MAX_DOWN_PULSE) {
     console.log('TILT: Max. DOWN reached')
     return false
@@ -57,7 +57,7 @@ function setServoPulse(channel, pulse) {
   } else  {
     currentPositionServo.tilt = pulse
   }
-  pwm.setPulseLength(channel, pulse)
+  await pwm.setPulseLength(channel, pulse)
 }
 
 // Helper function to add a delay
@@ -142,13 +142,13 @@ async function moveToPositionRelative(panPulseRel, tiltPulseRel) {
     throw new Error('Pan pulse out of range')
   } else if (newPan) {
     console.log('Now moving to new pan: ', newPan)
-    setServoPulse(panChannel, newPan)
+    await setServoPulse(panChannel, newPan)
   }
   if (newTilt && (newTilt < TILT_MAX_DOWN_PULSE || newTilt > TILT_MAX_UP_PULSE)) {
     throw new Error('Tilt pulse out of range')
   } else if (newTilt) {
     console.log('Now moving to new tilt: ', newTilt)
-    setServoPulse(tiltChannel, newTilt)
+    await setServoPulse(tiltChannel, newTilt)
   }
 }
 
