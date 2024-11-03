@@ -10,6 +10,20 @@ const options = {
 };
 
 // Stores the current position and the command queues for each servo
+// Channels for the pan and tilt servos
+const panChannel = 0;
+const tiltChannel = 1;
+
+const TILT_MAX_DOWN_PULSE = 1350;
+const TILT_MAX_UP_PULSE = 2400;
+
+const PAN_MAX_RIGHT_PULSE = 1200;
+const PAN_MAX_LEFT_PULSE = 2000;
+
+const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE) / 2);
+const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE) / 2);
+
+
 let currentPositionServo = {
   pan: PAN_CENTER_PULSE,
   tilt: TILT_CENTER_PULSE,
@@ -30,18 +44,6 @@ const pwm = new Pca9685Driver(options, (err) => {
   startTiltPulse();
 });
 
-// Channels for the pan and tilt servos
-const panChannel = 0;
-const tiltChannel = 1;
-
-const TILT_MAX_DOWN_PULSE = 1350;
-const TILT_MAX_UP_PULSE = 2400;
-
-const PAN_MAX_RIGHT_PULSE = 1200;
-const PAN_MAX_LEFT_PULSE = 2000;
-
-const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE) / 2);
-const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE) / 2);
 
 // Function to start processing the pan servo queue
 async function startPanPulse() {
