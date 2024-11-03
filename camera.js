@@ -28,55 +28,79 @@ function startVideoStream(socket) {
 
     console.log('Starting video stream...');
     
-    // Use libcamera-vid to output MJPEG stream
+    // Use libcamera-vid with improved parameters
     const command = 'libcamera-vid';
     const args = [
         '--codec', 'mjpeg',
-        '--width', '640',      // Reduced size for better performance
+        '--width', '640',
         '--height', '480',
-        '--framerate', '15',   // Reduced framerate for better performance
-        '--inline',            // Output JPEG header with each frame
-        '--output', '-'        // Output to stdout
+        '--framerate', '15',
+        '--inline',
+        '--nopreview',           // Explicitly disable preview
+        '--timeout', '0',        // Run indefinitely
+        '--output', '-'
     ];
 
-    videoProcess = spawn(command, args);
-    let buffer = Buffer.from([]);
+    try {
+        videoProcess = spawn(command, args);
+        let buffer = Buffer.from([]);
 
-    videoProcess.stdout.on('data', (data) => {
-        buffer = Buffer.concat([buffer, data]);
-        
-        // Look for JPEG start and end markers
-        let start = 0;
-        let end = 0;
-        
-        while (true) {
-            start = buffer.indexOf(Buffer.from([0xFF, 0xD8])); // JPEG start marker
-            end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));   // JPEG end marker
+        // Handle stdout data (video frames)
+        videoProcess.stdout.on('data', (data) => {
+            buffer = Buffer.concat([buffer, data]);
             
-            if (start !== -1 && end !== -1 && end > start) {
-                const frame = buffer.slice(start, end + 2);
-                socket.emit('videoFrame', frame.toString('base64'));
-                buffer = buffer.slice(end + 2);
-            } else {
-                break;
+            // Look for JPEG start and end markers
+            let start = 0;
+            let end = 0;
+            
+            while (true) {
+                start = buffer.indexOf(Buffer.from([0xFF, 0xD8])); // JPEG start marker
+                end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));   // JPEG end marker
+                
+                if (start !== -1 && end !== -1 && end > start) {
+                    const frame = buffer.slice(start, end + 2);
+                    // Only emit if the frame is a valid size
+                    if (frame.length > 1000) { // Basic size check
+                        socket.emit('videoFrame', frame.toString('base64'));
+                    }
+                    buffer = buffer.slice(end + 2);
+                } else {
+                    break;
+                }
             }
-        }
-    });
+        });
 
-    videoProcess.stderr.on('data', (data) => {
-        console.error(`Video stream error: ${data}`);
-    });
+        // Handle stderr (debug messages)
+        videoProcess.stderr.on('data', (data) => {
+            const message = data.toString();
+            // Only log actual errors, not information messages
+            if (!message.includes('INFO') && !message.includes('#')) {
+                console.log('Video stream message:', message);
+            }
+        });
 
-    videoProcess.on('close', (code) => {
-        console.log(`Video stream process exited with code ${code}`);
+        // Handle process exit
+        videoProcess.on('close', (code) => {
+            console.log(`Video stream process exited with code ${code}`);
+            videoProcess = null;
+        });
+
+        // Handle process errors
+        videoProcess.on('error', (err) => {
+            console.error('Video stream process error:', err);
+            videoProcess = null;
+        });
+
+    } catch (error) {
+        console.error('Failed to start video stream:', error);
         videoProcess = null;
-    });
+    }
 }
 
 // Function to stop video stream
 function stopVideoStream() {
     if (videoProcess) {
-        videoProcess.kill();
+        videoProcess.kill('SIGTERM');
         videoProcess = null;
         console.log('Video stream stopped');
     }
