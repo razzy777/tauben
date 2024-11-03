@@ -9,11 +9,12 @@ const options = {
   debug: false,
 };
 
-// Stores the current position and the command queue
+// Stores the current position and the command queues for each servo
 let currentPositionServo = {
-  pan: null,
-  tilt: null,
-  commandQue: [],
+  pan: PAN_CENTER_PULSE,
+  tilt: TILT_CENTER_PULSE,
+  panQueue: [],
+  tiltQueue: [],
 };
 
 // Initialize the PCA9685 servo driver
@@ -23,7 +24,10 @@ const pwm = new Pca9685Driver(options, (err) => {
     process.exit(-1);
   }
   console.log('PCA9685 initialized');
-  startServoPulse(); // Start processing the command queue once initialized
+
+  // Start processing the pan and tilt queues independently
+  startPanPulse();
+  startTiltPulse();
 });
 
 // Channels for the pan and tilt servos
@@ -39,21 +43,34 @@ const PAN_MAX_LEFT_PULSE = 2000;
 const TILT_CENTER_PULSE = Math.round((TILT_MAX_DOWN_PULSE + TILT_MAX_UP_PULSE) / 2);
 const PAN_CENTER_PULSE = Math.round((PAN_MAX_RIGHT_PULSE + PAN_MAX_LEFT_PULSE) / 2);
 
-// Function to start processing the servo pulse queue
-async function startServoPulse() {
+// Function to start processing the pan servo queue
+async function startPanPulse() {
   while (true) {
-    if (currentPositionServo.commandQue.length > 0) {
-      let firstTask = currentPositionServo.commandQue.shift();
+    if (currentPositionServo.panQueue.length > 0) {
+      let task = currentPositionServo.panQueue.shift();
       try {
-        // Execute the command
-        console.log('exec com', firstTask.channel, firstTask.pulse)
-        await executeServoCommand(firstTask.channel, firstTask.pulse);
+        await executeServoCommand(panChannel, task.pulse);
       } catch (error) {
-        console.error('Error executing servo command:', error);
+        console.error('Error executing pan command:', error);
       }
     } else {
-      // No commands to process, introduce a short delay to avoid busy looping
-      await delay(100);
+      await delay(100); // Small delay to prevent busy looping
+    }
+  }
+}
+
+// Function to start processing the tilt servo queue
+async function startTiltPulse() {
+  while (true) {
+    if (currentPositionServo.tiltQueue.length > 0) {
+      let task = currentPositionServo.tiltQueue.shift();
+      try {
+        await executeServoCommand(tiltChannel, task.pulse);
+      } catch (error) {
+        console.error('Error executing tilt command:', error);
+      }
+    } else {
+      await delay(100); // Small delay to prevent busy looping
     }
   }
 }
@@ -76,7 +93,7 @@ async function executeServoCommand(channel, pulse) {
   }
 
   // Set the pulse length for the servo driver
-  await pwm.setPulseLength(channel, pulse);
+  pwm.setPulseLength(channel, pulse);
 
   // Delay to allow the servo to move to the desired position
   await delay(1200); // Adjust based on the speed of your servo
@@ -87,9 +104,13 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Function to add a command to the queue
+// Function to add a command to the appropriate queue
 function setServoPulse(channel, pulse) {
-  currentPositionServo.commandQue.push({ channel, pulse });
+  if (channel === panChannel) {
+    currentPositionServo.panQueue.push({ channel, pulse });
+  } else if (channel === tiltChannel) {
+    currentPositionServo.tiltQueue.push({ channel, pulse });
+  }
 }
 
 // Initial servo test function
