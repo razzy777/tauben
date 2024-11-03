@@ -21,7 +21,6 @@ const Panel = styled.div`
     grid-template-columns: 1fr;
   }
 `;
-
 const LiveFeedContainer = styled.div`
     position: relative;
     width: 100%;
@@ -39,13 +38,14 @@ const RotatedVideo = styled.img`
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 177.77%; /* 16:9 ratio compensation for rotation */
+    width: 100%;  // Ensure it fills the entire container width
     height: 100%;
     object-fit: cover;
     transform: translate(-50%, -50%) rotate(90deg);
     transform-origin: center;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
+
 
 // Replace your current ImageContainer with this:
 const ImageContainer = styled.div`

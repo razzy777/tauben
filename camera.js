@@ -30,16 +30,17 @@ function startVideoStream(socket) {
     
     // Use libcamera-vid with improved parameters
     const command = 'libcamera-vid';
-    const args = [
-        '--codec', 'mjpeg',
-        '--width', '640',
-        '--height', '480',
-        '--framerate', '15',
-        '--inline',
-        '--nopreview',           // Explicitly disable preview
-        '--timeout', '0',        // Run indefinitely
-        '--output', '-'
-    ];
+	const args = [
+		'--codec', 'mjpeg',
+		'--width', '1280',      // Change to a wider resolution
+		'--height', '720',      // 16:9 aspect ratio
+		'--framerate', '15',
+		'--inline',
+		'--nopreview',
+		'--timeout', '0',
+		'--output', '-'
+	];
+	
 
     try {
         videoProcess = spawn(command, args);
