@@ -22,40 +22,61 @@ function ensureDirectories() {
     });
 }
 
-// Clean up any existing stream files
-function cleanupStreamFiles() {
-    if (fs.existsSync(currentFrame)) {
-        fs.unlinkSync(currentFrame);
-    }
-}
-
 let streamProcess = null;
-let watcher = null;
 
-function startVideoStream(socket) {
+async function startVideoStream(socket) {
     if (streamProcess) {
         console.log('Stream already running');
         return;
     }
 
     ensureDirectories();
-    cleanupStreamFiles();
-
     console.log('Starting camera stream...');
 
-    // Start libcamera-still in timelapse mode
-    streamProcess = spawn('libcamera-still', [
-        '--width', '640',     // Width
-        '--height', '480',    // Height
-        '--quality', '10',    // Quality (lower number = higher quality)
-        '--output', currentFrame,  // Output file
-        '--timelapse', '200', // Time between shots (ms)
-        '--timeout', '0',     // Run indefinitely
-        '--nopreview'         // No preview window
+    // Using libcamera-vid with MJPEG output
+    streamProcess = spawn('libcamera-vid', [
+        '--camera', '0',           // First camera
+        '--codec', 'mjpeg',        // Use MJPEG codec
+        '--width', '640',          // Width
+        '--height', '480',         // Height
+        '--framerate', '10',       // Reduced framerate for stability
+        '--inline',                // Output frames immediately
+        '--output', '-',           // Output to stdout
+        '--nopreview',             // No preview window
+        '--timeout', '0'           // Run indefinitely
     ]);
 
+    let buffer = Buffer.alloc(0);
+    const jpegStart = Buffer.from([0xFF, 0xD8]);
+    const jpegEnd = Buffer.from([0xFF, 0xD9]);
+
+    streamProcess.stdout.on('data', (data) => {
+        buffer = Buffer.concat([buffer, data]);
+        
+        // Find complete JPEG frames
+        let startIndex = 0;
+        while (true) {
+            const frameStart = buffer.indexOf(jpegStart, startIndex);
+            if (frameStart === -1) break;
+            
+            const frameEnd = buffer.indexOf(jpegEnd, frameStart + 2);
+            if (frameEnd === -1) break;
+            
+            // Extract and emit the frame
+            const frame = buffer.slice(frameStart, frameEnd + 2);
+            socket.emit('videoFrame', frame.toString('base64'));
+            
+            startIndex = frameEnd + 2;
+        }
+        
+        // Keep only the incomplete frame data
+        if (startIndex > 0) {
+            buffer = buffer.slice(startIndex);
+        }
+    });
+
     streamProcess.stderr.on('data', (data) => {
-        console.log('Stream output:', data.toString());
+        console.error('Stream error:', data.toString());
     });
 
     streamProcess.on('close', (code) => {
@@ -65,25 +86,7 @@ function startVideoStream(socket) {
 
     streamProcess.on('error', (err) => {
         console.error('Stream process error:', err);
-    });
-
-    // Watch for file changes and emit to socket
-    watcher = chokidar.watch(currentFrame, {
-        persistent: true,
-        awaitWriteFinish: {
-            stabilityThreshold: 100,
-            pollInterval: 100
-        }
-    });
-
-    watcher.on('change', (path) => {
-        try {
-            const imageData = fs.readFileSync(currentFrame);
-            const base64Image = imageData.toString('base64');
-            socket.emit('videoFrame', base64Image);
-        } catch (error) {
-            console.error('Error reading frame:', error);
-        }
+        streamProcess = null;
     });
 }
 
@@ -92,32 +95,35 @@ function stopVideoStream() {
         streamProcess.kill();
         streamProcess = null;
     }
-    
-    if (watcher) {
-        watcher.close();
-        watcher = null;
-    }
-
-    cleanupStreamFiles();
     console.log('Stream stopped');
 }
 
-// Update photo capture function to use libcamera-still
 async function captureImage() {
     return new Promise((resolve, reject) => {
         const imagePath = path.join(folderPath, 'test_picture.jpg');
-        const captureCommand = `libcamera-still -o ${imagePath} -t 1000 --width 1280 --height 720`;
+        const captureCommand = spawn('libcamera-still', [
+            '--camera', '0',
+            '--width', '1280',
+            '--height', '720',
+            '--output', imagePath,
+            '--nopreview'
+        ]);
 
-        exec(captureCommand, (err, stdout, stderr) => {
-            if (err) {
-                reject(new Error(`Error capturing image: ${err.message}`));
-                return;
+        captureCommand.stderr.on('data', (data) => {
+            console.log('Capture output:', data.toString());
+        });
+
+        captureCommand.on('close', (code) => {
+            if (code === 0) {
+                console.log('Image captured successfully');
+                resolve(imagePath);
+            } else {
+                reject(new Error(`Capture failed with code ${code}`));
             }
-            if (stderr) {
-                console.error('libcamera-still error:', stderr);
-            }
-            console.log('Image successfully captured and saved at:', imagePath);
-            resolve(imagePath);
+        });
+
+        captureCommand.on('error', (err) => {
+            reject(new Error(`Capture process error: ${err.message}`));
         });
     });
 }
@@ -134,22 +140,25 @@ async function removeImage(imagePath) {
                 resolve();
             });
         } else {
-            reject(new Error('Image file does not exist.'));
+            resolve(); // Don't reject if file doesn't exist
         }
     });
 }
 
-// Add a utility function to check if camera is available
+// Function to check if the camera is available
 async function checkCamera() {
     return new Promise((resolve) => {
-        exec('libcamera-still --list-cameras', (error, stdout, stderr) => {
+        exec('v4l2-ctl --list-devices', (error, stdout, stderr) => {
             if (error) {
                 console.error('Error checking camera:', error);
                 resolve(false);
                 return;
             }
-            // Check if camera is found in output
-            resolve(!stderr.includes('no cameras available'));
+            
+            // Check if PISP devices are present
+            const hasPisp = stdout.includes('pispbe');
+            console.log('Camera check result:', stdout);
+            resolve(hasPisp);
         });
     });
 }
