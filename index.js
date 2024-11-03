@@ -31,7 +31,8 @@ async function initializeSystem() {
     console.log('Relay controller initialized');
 
     // Perform initial servo test
-    await performInitialServoTest();
+    
+    //await performInitialServoTest();
     
     // Start the server
     server.listen(3000, () => {
@@ -143,6 +144,32 @@ function handleSocketConnection(socket) {
     } catch (error) {
       console.error('Error activating water:', error);
       socket.emit('error', { message: 'Failed to activate water' });
+    }
+  });
+  // Add this to your socket connection handler
+    socket.on('getServoStatus', () => {
+        try {
+        const status = servoSystem.getQueueStatus();
+        socket.emit('servoStatus', status);
+        } catch (error) {
+        console.error('Error getting servo status:', error);
+        socket.emit('error', { message: 'Failed to get servo status' });
+        }
+    });
+  
+  // Update your move handlers to include status updates
+  socket.on('moveServoRelative', ({ pan, tilt }) => {
+    try {
+      console.log(`Moving servo relatively: pan=${pan}, tilt=${tilt}`);
+      servoSystem.moveToPositionRelative(pan, tilt);
+      
+      // Send immediate status update
+      const status = servoSystem.getQueueStatus();
+      socket.emit('servoStatus', status);
+      
+    } catch (error) {
+      console.error('Error moving servo relatively:', error);
+      socket.emit('error', { message: 'Failed to move servo' });
     }
   });
 
