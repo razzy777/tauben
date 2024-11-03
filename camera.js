@@ -28,7 +28,7 @@ function startVideoStream(socket) {
 
     console.log('Starting video stream...');
     
-    // Use libcamera-vid with improved parameters
+    // Use libcamera-vid with rotation parameters
     const command = 'libcamera-vid';
     const args = [
         '--codec', 'mjpeg',
@@ -36,8 +36,9 @@ function startVideoStream(socket) {
         '--height', '480',
         '--framerate', '15',
         '--inline',
-        '--nopreview',           // Explicitly disable preview
-        '--timeout', '0',        // Run indefinitely
+        '--nopreview',
+        '--rotation', '270',     // Add rotation (try 90, 180, or 270 to find the correct orientation)
+        '--timeout', '0',
         '--output', '-'
     ];
 
@@ -60,7 +61,7 @@ function startVideoStream(socket) {
                 if (start !== -1 && end !== -1 && end > start) {
                     const frame = buffer.slice(start, end + 2);
                     // Only emit if the frame is a valid size
-                    if (frame.length > 1000) { // Basic size check
+                    if (frame.length > 1000) {
                         socket.emit('videoFrame', frame.toString('base64'));
                     }
                     buffer = buffer.slice(end + 2);
@@ -73,19 +74,16 @@ function startVideoStream(socket) {
         // Handle stderr (debug messages)
         videoProcess.stderr.on('data', (data) => {
             const message = data.toString();
-            // Only log actual errors, not information messages
             if (!message.includes('INFO') && !message.includes('#')) {
                 console.log('Video stream message:', message);
             }
         });
 
-        // Handle process exit
         videoProcess.on('close', (code) => {
             console.log(`Video stream process exited with code ${code}`);
             videoProcess = null;
         });
 
-        // Handle process errors
         videoProcess.on('error', (err) => {
             console.error('Video stream process error:', err);
             videoProcess = null;
@@ -106,10 +104,10 @@ function stopVideoStream() {
     }
 }
 
-// Existing photo capture function
+// Update the still image capture to match the rotation
 async function captureImage() {
     return new Promise((resolve, reject) => {
-        const captureCommand = `libcamera-still -o ${imagePath} -t 1000 --width 1280 --height 720`;
+        const captureCommand = `libcamera-still -o ${imagePath} -t 1000 --width 1280 --height 720 --rotation 270`;  // Added rotation
         
         exec(captureCommand, (err, stdout, stderr) => {
             if (err) {
