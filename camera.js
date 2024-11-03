@@ -32,9 +32,9 @@ function startVideoStream(socket) {
     const command = 'libcamera-vid';
     const args = [
         '--codec', 'mjpeg',
-        '--width', '1920',
-        '--height', '1080',
-        '--framerate', '30',
+        '--width', '480',
+        '--height', '640',
+        '--framerate', '15',
         '--inline',
         '--nopreview',           // Explicitly disable preview
         '--timeout', '0',        // Run indefinitely
