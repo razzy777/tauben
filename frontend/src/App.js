@@ -41,6 +41,14 @@ function App() {
     }
   };
 
+  const moveServoRelative = (pan, tilt) => {
+    if (socket) {
+      socket.emit('moveServo', { pan, tilt });
+    } else {
+      console.error('Socket is not available');
+    }
+  };
+
   const centerServo = () => {
     if (socket) {
       socket.emit('centerServo');
@@ -63,8 +71,10 @@ function App() {
       <div>
         <button onClick={takePhoto}>Take Photo</button>
         <button onClick={centerServo}>Center Servos</button>
-        <button onClick={() => moveServo(1200, 1350)}>Move Servo: Right & Down</button>
-        <button onClick={() => moveServo(2300, 2500)}>Move Servo: Left & Up</button>
+        <button onClick={() => moveServoRelative(0, 10)}>Move Servo: Up</button>
+        <button onClick={() => moveServoRelative(0, -10)}>Move Servo: Down</button>
+        <button onClick={() => moveServoRelative(10, 0)}>Move Servo: Right</button>
+        <button onClick={() => moveServoRelative(-10, 0)}>Move Servo: Left</button>
         <button onClick={() => activateWater(500)}>Activate Water (500ms)</button>
       </div>
       {detection ? (

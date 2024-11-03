@@ -9,6 +9,11 @@ const options = {
   debug: false,
 }
 
+let currentPositionServo = {
+  pan: null, 
+  tilt: null
+}
+
 // Initialize the PCA9685 servo driver
 const pwm = new Pca9685Driver(options, (err) => {
   if (err) {
@@ -46,6 +51,11 @@ function setServoPulse(channel, pulse) {
   } else if (channel === 0 && pulse < PAN_MAX_RIGHT_PULSE) {
     console.log('PAN: Max. RIGHT reached')
     return false
+  }
+  if (channel === 0) {
+    currentPositionServo.pan = pulse
+  } else  {
+    currentPositionServo.tilt = pulse
   }
   pwm.setPulseLength(channel, pulse)
 }
@@ -123,6 +133,23 @@ async function moveToPosition(panPulse, tiltPulse) {
   setServoPulse(panChannel, panPulse)
   setServoPulse(tiltChannel, tiltPulse)
 }
+
+// Function to move servos to a specific position
+async function moveToPositionRelative(panPulseRel, tiltPulseRel) {
+  let newPan = panPulseRel ? currentPositionServo.pan + panPulseRel : null
+  let newTilt = tiltPulseRel ? currentPositionServo.tile + tiltPulseRel : null
+  if (newPan && (newPan < PAN_MAX_RIGHT_PULSE || newPan > PAN_MAX_LEFT_PULSE)) {
+    throw new Error('Pan pulse out of range')
+  } else if (newPan) {
+    setServoPulse(panChannel, panPulse)
+  }
+  if (newTilt && (newTilt < TILT_MAX_DOWN_PULSE || newTilt > TILT_MAX_UP_PULSE)) {
+    throw new Error('Tilt pulse out of range')
+  } else if (newTilt) {
+    setServoPulse(tiltChannel, newTilt)
+  }
+}
+
 
 // Function to generate a random pulse within a range
 function getRandomPulse(min, max) {

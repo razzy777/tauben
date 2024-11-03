@@ -1,6 +1,6 @@
 const http = require('http');
 const socketIo = require('socket.io');
-const { startServoTest, centerServos, moveToPosition } = require('./servo');
+const { startServoTest, centerServos, moveToPosition, moveToPositionRelative } = require('./servo');
 const { captureImage, removeImage } = require('./camera');
 const { ServoController } = require('./relay');
 
@@ -56,6 +56,16 @@ io.on('connection', (socket) => {
     try {
       console.log(`Moving servo to position: pan=${pan}, tilt=${tilt}`);
       await moveToPosition(pan, tilt);
+      console.log('Servo moved to requested position.');
+    } catch (error) {
+      console.error('Error moving servo:', error);
+    }
+  });
+
+  socket.on('moveServoRelative', async ({ pan, tilt }) => {
+    try {
+      console.log(`Moving servo to RELATIVE position: pan=${pan}, tilt=${tilt}`);
+      await moveToPositionRelative(pan, tilt);
       console.log('Servo moved to requested position.');
     } catch (error) {
       console.error('Error moving servo:', error);
