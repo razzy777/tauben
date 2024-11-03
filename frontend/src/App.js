@@ -26,26 +26,28 @@ const LiveFeedContainer = styled.div`
     position: relative;
     width: 100%;
     margin-bottom: 1rem;
-    /* Add aspect ratio container to prevent layout shift */
     &::before {
         content: "";
         display: block;
-        padding-top: 75%; /* 4:3 aspect ratio */
+        padding-top: 56.25%; /* 16:9 aspect ratio */
     }
+    overflow: hidden;
 `;
 
 const RotatedVideo = styled.img`
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 50%;
+    left: 50%;
+    width: 133.33%; /* Compensate for rotation to maintain aspect ratio */
+    height: 75%; /* Adjust this to control zoom level */
     object-fit: cover;
-    transform: rotate(90deg); /* Adjust this value to 90, 180, or 270 as needed */
-    transform-origin: center center;
+    transform: translate(-50%, -50%) rotate(90deg);
+    transform-origin: center;
     border-radius: 0.5rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
+
+
 
 
 const Title = styled.h1`
@@ -150,15 +152,30 @@ const StatusItem = styled.div`
 `;
 
 const ImageContainer = styled.div`
-  position: relative;
-  margin-top: 1rem;
-  
-  img {
-    width: 100%;
-    border-radius: 0.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
+    position: relative;
+    margin-top: 1rem;
+    
+    &::before {
+        content: "";
+        display: block;
+        padding-top: 56.25%; /* 16:9 aspect ratio */
+    }
+    overflow: hidden;
+    
+    img {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 133.33%;
+        height: 75%;
+        object-fit: cover;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transform: translate(-50%, -50%) rotate(90deg);
+        transform-origin: center;
+    }
 `;
+
 
 const NoImage = styled.div`
   height: 300px;
@@ -328,34 +345,33 @@ function App() {
         </ControlCard>
 
         <ControlCard>
-    <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
-    <LiveFeedContainer>
-        {videoFrame ? (
-            <RotatedVideo
-                src={`data:image/jpeg;base64,${videoFrame}`}
-                alt="Live Feed"
-            />
-        ) : (
-            <NoImage>Waiting for video feed...</NoImage>
-        )}
-    </LiveFeedContainer>
-    
-    {detection && detection.image && (
-        <div>
-            <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
-            <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
-                Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
-            </p>
-            <ImageContainer>
-                <img
-                    src={`data:image/jpeg;base64,${detection.image}`}
-                    alt="Capture"
-                    style={{ transform: 'rotate(90deg)', transformOrigin: 'center center' }}
-                />
-            </ImageContainer>
-        </div>
-    )}
-  </ControlCard>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
+          <LiveFeedContainer>
+              {videoFrame ? (
+                  <RotatedVideo
+                      src={`data:image/jpeg;base64,${videoFrame}`}
+                      alt="Live Feed"
+                  />
+              ) : (
+                  <NoImage>Waiting for video feed...</NoImage>
+              )}
+          </LiveFeedContainer>
+          
+          {detection && detection.image && (
+              <div>
+                  <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
+                  <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+                      Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
+                  </p>
+                  <ImageContainer>
+                      <img
+                          src={`data:image/jpeg;base64,${detection.image}`}
+                          alt="Capture"
+                      />
+                  </ImageContainer>
+              </div>
+          )}
+      </ControlCard>      
       </Panel>
     </Container>
   );
