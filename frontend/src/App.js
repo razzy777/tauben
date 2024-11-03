@@ -73,8 +73,8 @@ function App() {
         <button onClick={centerServo}>Center Servos</button>
         <button onClick={() => moveServoRelative(0, 10)}>Move Servo: Up</button>
         <button onClick={() => moveServoRelative(0, -10)}>Move Servo: Down</button>
-        <button onClick={() => moveServoRelative(10, 0)}>Move Servo: Right</button>
-        <button onClick={() => moveServoRelative(-10, 0)}>Move Servo: Left</button>
+        <button onClick={() => moveServoRelative(-10, 0)}>Move Servo: Right</button>
+        <button onClick={() => moveServoRelative(10, 0)}>Move Servo: Left</button>
         <button onClick={() => activateWater(500)}>Activate Water (500ms)</button>
       </div>
       {detection ? (

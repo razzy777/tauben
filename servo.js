@@ -64,7 +64,7 @@ async function setServoPulse(channel, pulse) {
 
   // Introduce delay to allow servo to reach the desired position
   // You may need to adjust this delay to fit the specific servo speed
-  await delay(1000) // 500ms delay is arbitrary, adjust based on your servo's speed
+  await delay(1200) // 500ms delay is arbitrary, adjust based on your servo's speed
 }
 
 
