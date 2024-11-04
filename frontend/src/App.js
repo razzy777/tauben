@@ -207,7 +207,7 @@ function App() {
   const [videoFrame, setVideoFrame] = useState(null);
 
   useEffect(() => {
-      const newSocket = io('http://192.168.68.58:3000');
+      const newSocket = io('http://192.168.68.68:3000');
       setSocket(newSocket);
 
       newSocket.on('detection', (data) => {
