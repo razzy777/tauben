@@ -34,16 +34,10 @@ const LiveFeedContainer = styled.div`
     border-radius: 0.5rem;
 `;
 
-const RotatedVideo = styled.img`
+const Video = styled.img`
     position: absolute;
-    top: 50%;
-    left: 50%;
     width: 100%;  // Ensure it fills the entire container width
     height: 100%;
-    object-fit: cover;
-    transform: translate(-50%, -50%) rotate(90deg);
-    transform-origin: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
 
 
@@ -356,7 +350,7 @@ function App() {
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
           <LiveFeedContainer>
               {videoFrame ? (
-                  <RotatedVideo
+                  <Video
                       src={`data:image/jpeg;base64,${videoFrame}`}
                       alt="Live Feed"
                   />

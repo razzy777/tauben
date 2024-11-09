@@ -35,6 +35,7 @@ function startVideoStream(socket) {
 		'--width', '1280',      // Change to a wider resolution
 		'--height', '720',      // 16:9 aspect ratio
 		'--framerate', '15',
+		'--rotation', '180', 
 		'--inline',
 		'--nopreview',
 		'--timeout', '0',
