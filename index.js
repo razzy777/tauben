@@ -79,6 +79,32 @@ async function performInitialServoTest() {
   console.log('Initial servo test completed');
 }
 
+async function performScan() {
+    // Define scanning parameters
+    const panStart = servoSystem.PAN_MAX_RIGHT_PULSE;
+    const panEnd = servoSystem.PAN_MAX_LEFT_PULSE;
+    const tiltStart = servoSystem.TILT_MAX_DOWN_PULSE;
+    const tiltEnd = servoSystem.TILT_MAX_UP_PULSE;
+  
+    const panSteps = 5;
+    const tiltSteps = 3;
+    const delayBetweenMoves = 1000; // milliseconds
+  
+    const panStepSize = (panEnd - panStart) / panSteps;
+    const tiltStepSize = (tiltEnd - tiltStart) / tiltSteps;
+  
+    for (let tiltPulse = tiltStart; tiltPulse <= tiltEnd; tiltPulse += tiltStepSize) {
+      for (let panPulse = panStart; panPulse <= panEnd; panPulse += panStepSize) {
+        await servoSystem.moveToPositionAndWait(panPulse, tiltPulse);
+        await new Promise(resolve => setTimeout(resolve, delayBetweenMoves));
+      }
+    }
+  
+    // Return to center position
+    await servoSystem.moveToPositionAndWait(servoSystem.PAN_CENTER_PULSE, servoSystem.TILT_CENTER_PULSE);
+  }
+  
+
 // Socket connection handler
 function handleSocketConnection(socket) {
   console.log('New client connected:', socket.id);
@@ -197,6 +223,18 @@ function handleSocketConnection(socket) {
       socket.emit('error', { message: 'Failed to move servos and activate water' });
     }
   });
+
+  socket.on('startScan', async () => {
+    try {
+      console.log('Starting scan...');
+      await performScan();
+      socket.emit('scanCompleted');
+    } catch (error) {
+      console.error('Error during scanning:', error);
+      socket.emit('error', { message: 'Failed to perform scan' });
+    }
+  });
+  
   
 
   // Handle client disconnect
