@@ -11,16 +11,13 @@ const Container = styled.div`
 `;
 
 const Panel = styled.div`
-  max-width: 1200px;
+  max-width: 1600px; // Increased max-width
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 2rem;
-  
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
 `;
+
 const LiveFeedContainer = styled.div`
     position: relative;
     width: 100%;
@@ -31,49 +28,15 @@ const LiveFeedContainer = styled.div`
         padding-top: 56.25%; /* 16:9 aspect ratio */
     }
     overflow: hidden;
-    border-radius: 0.5rem;
-    background: rgba(0, 0, 0, 0.2);
+    border-radius: 1rem;
 `;
 
 const Video = styled.img`
     position: absolute;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
-
-
-// Replace your current ImageContainer with this:
-const ImageContainer = styled.div`
-    position: relative;
-    margin-top: 1rem;
-    
-    &::before {
-        content: "";
-        display: block;
-        padding-top: 56.25%; /* 16:9 aspect ratio */
-    }
-    overflow: hidden;
-    border-radius: 0.5rem;
-    
-    img {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 177.77%;
-        height: 100%;
-        object-fit: cover;
-        transform: translate(-50%, -50%) rotate(90deg);
-        transform-origin: center;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-`;
-
-
-
 
 const Title = styled.h1`
   text-align: center;
@@ -81,6 +44,16 @@ const Title = styled.h1`
   margin-bottom: 2rem;
   color: #64ffda;
   text-shadow: 0 0 10px rgba(100, 255, 218, 0.3);
+`;
+
+const ControlsWrapper = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const ControlCard = styled.div`
@@ -176,9 +149,6 @@ const StatusItem = styled.div`
   color: #94a3b8;
 `;
 
-
-
-// Update your NoImage component to match the container:
 const NoImage = styled.div`
     position: absolute;
     top: 0;
@@ -193,51 +163,53 @@ const NoImage = styled.div`
     color: #94a3b8;
 `;
 
+const CapturesSection = styled.div`
+  margin-top: 2rem;
+`;
 
 function App() {
   const [detection, setDetection] = useState(null);
   const [socket, setSocket] = useState(null);
   const [keyStates, setKeyStates] = useState({});
   const [systemStatus, setSystemStatus] = useState(null);
+  const [videoFrame, setVideoFrame] = useState(null);
 
   const MOVEMENT_AMOUNT = 10;
   const KEY_REPEAT_DELAY = 100;
 
-  const [videoFrame, setVideoFrame] = useState(null);
-
+  // Socket connection and event handlers remain the same
   useEffect(() => {
     const newSocket = io('http://192.168.68.68:3000');
     setSocket(newSocket);
 
+    newSocket.on('detection', (data) => {
+      setDetection(data);
+    });
+
+    newSocket.on('servoStatus', (status) => {
+      setSystemStatus(status);
+    });
+
     newSocket.on('videoFrame', (frameData) => {
-        console.log('Received frame'); // Debug log
-        setVideoFrame(frameData);
+      setVideoFrame(frameData);
     });
-
-    newSocket.on('connect', () => {
-        console.log('Socket connected');
-    });
-
-    newSocket.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
-    });
-
-    // ... rest of your socket handlers
 
     return () => {
-        newSocket.off('videoFrame');
-        newSocket.off('connect');
-        newSocket.off('connect_error');
-        newSocket.close();
+      newSocket.off('detection');
+      newSocket.off('servoStatus');
+      newSocket.off('videoFrame');
+      newSocket.close();
     };
-}, []);
+  }, []);
 
+  // Movement handlers remain the same
   const moveServoRelative = useCallback((pan, tilt) => {
     if (socket) {
       socket.emit('moveServoRelative', { pan, tilt });
     }
   }, [socket]);
 
+  // Keyboard controls remain the same
   useEffect(() => {
     const keyIntervals = {};
     
@@ -291,97 +263,106 @@ function App() {
     <Container>
       <Title>System Control Panel</Title>
       <Panel>
-        <ControlCard>
-          <ControlGrid>
-            <div />
-            <DirectionButton 
-              onClick={() => moveServoRelative(0, MOVEMENT_AMOUNT)}
-              active={keyStates['ArrowUp']}
-            >
-              ▲
-            </DirectionButton>
-            <div />
-            
-            <DirectionButton
-              onClick={() => moveServoRelative(MOVEMENT_AMOUNT, 0)}
-              active={keyStates['ArrowLeft']}
-            >
-              ◄
-            </DirectionButton>
-            <DirectionButton
-              onClick={() => socket?.emit('centerServo')}
-              center
-            >
-              ⟲
-            </DirectionButton>
-            <DirectionButton
-              onClick={() => moveServoRelative(-MOVEMENT_AMOUNT, 0)}
-              active={keyStates['ArrowRight']}
-            >
-              ►
-            </DirectionButton>
-            
-            <div />
-            <DirectionButton
-              onClick={() => moveServoRelative(0, -MOVEMENT_AMOUNT)}
-              active={keyStates['ArrowDown']}
-            >
-              ▼
-            </DirectionButton>
-            <div />
-          </ControlGrid>
-
-          <ActionButtonContainer>
-            <ActionButton onClick={() => socket?.emit('takePhoto')}>
-              📸 Take Photo
-            </ActionButton>
-            <ActionButton 
-              onClick={() => socket?.emit('activateWater', 500)}
-              water
-            >
-              💧 Water
-            </ActionButton>
-          </ActionButtonContainer>
-
-          {systemStatus && (
-            <StatusGrid>
-              <StatusItem>Pan Queue: {systemStatus.panQueueLength}</StatusItem>
-              <StatusItem>Tilt Queue: {systemStatus.tiltQueueLength}</StatusItem>
-              <StatusItem>Pan: {systemStatus.currentPosition?.pan}</StatusItem>
-              <StatusItem>Tilt: {systemStatus.currentPosition?.tilt}</StatusItem>
-            </StatusGrid>
-          )}
-        </ControlCard>
-
+        {/* Main video feed */}
         <ControlCard>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
           <LiveFeedContainer>
-              {videoFrame ? (
-                  <Video
-                      src={`data:image/jpeg;base64,${videoFrame}`}
-                      alt="Live Feed"
-                  />
-              ) : (
-                  <NoImage>Waiting for video feed...</NoImage>
-              )}
+            {videoFrame ? (
+              <Video
+                src={`data:image/jpeg;base64,${videoFrame}`}
+                alt="Live Feed"
+              />
+            ) : (
+              <NoImage>Waiting for video feed...</NoImage>
+            )}
           </LiveFeedContainer>
+        </ControlCard>
 
-          
-          {detection && detection.image && (
+        {/* Controls section */}
+        <ControlsWrapper>
+          <ControlCard>
+            <ControlGrid>
+              <div />
+              <DirectionButton 
+                onClick={() => moveServoRelative(0, MOVEMENT_AMOUNT)}
+                active={keyStates['ArrowUp']}
+              >
+                ▲
+              </DirectionButton>
+              <div />
+              
+              <DirectionButton
+                onClick={() => moveServoRelative(MOVEMENT_AMOUNT, 0)}
+                active={keyStates['ArrowLeft']}
+              >
+                ◄
+              </DirectionButton>
+              <DirectionButton
+                onClick={() => socket?.emit('centerServo')}
+                center
+              >
+                ⟲
+              </DirectionButton>
+              <DirectionButton
+                onClick={() => moveServoRelative(-MOVEMENT_AMOUNT, 0)}
+                active={keyStates['ArrowRight']}
+              >
+                ►
+              </DirectionButton>
+              
+              <div />
+              <DirectionButton
+                onClick={() => moveServoRelative(0, -MOVEMENT_AMOUNT)}
+                active={keyStates['ArrowDown']}
+              >
+                ▼
+              </DirectionButton>
+              <div />
+            </ControlGrid>
+
+            <ActionButtonContainer>
+              <ActionButton onClick={() => socket?.emit('takePhoto')}>
+                📸 Take Photo
+              </ActionButton>
+              <ActionButton 
+                onClick={() => socket?.emit('activateWater', 500)}
+                water
+              >
+                💧 Water
+              </ActionButton>
+            </ActionButtonContainer>
+
+            {systemStatus && (
+              <StatusGrid>
+                <StatusItem>Pan Queue: {systemStatus.panQueueLength}</StatusItem>
+                <StatusItem>Tilt Queue: {systemStatus.tiltQueueLength}</StatusItem>
+                <StatusItem>Pan: {systemStatus.currentPosition?.pan}</StatusItem>
+                <StatusItem>Tilt: {systemStatus.currentPosition?.tilt}</StatusItem>
+              </StatusGrid>
+            )}
+          </ControlCard>
+
+          {/* Captures section */}
+          <ControlCard>
+            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Captures</h2>
+            {detection && detection.image && (
               <div>
-                  <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#64ffda' }}>Last Capture</h3>
-                  <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
-                      Captured at: {new Date(detection.timestamp).toLocaleTimeString()}
-                  </p>
-                  <ImageContainer>
-                      <img
-                          src={`data:image/jpeg;base64,${detection.image}`}
-                          alt="Capture"
-                      />
-                  </ImageContainer>
+                <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+                  Last capture at: {new Date(detection.timestamp).toLocaleTimeString()}
+                </p>
+                <img
+                  src={`data:image/jpeg;base64,${detection.image}`}
+                  alt="Capture"
+                  style={{ 
+                    width: '100%',
+                    borderRadius: '0.5rem',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                  }}
+                />
               </div>
-          )}
-      </ControlCard>      
+            )}
+          </ControlCard>
+        </ControlsWrapper>
       </Panel>
     </Container>
   );
