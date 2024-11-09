@@ -21,21 +21,22 @@ const Panel = styled.div`
 const LiveFeedContainer = styled.div`
     position: relative;
     width: 100%;
+    background: #000;
     margin-bottom: 1rem;
     &::before {
         content: "";
         display: block;
-        padding-top: 56.25%; /* 16:9 aspect ratio */
+        padding-top: 56.25%;
     }
-    overflow: hidden;
-    border-radius: 1rem;
 `;
 
 const Video = styled.img`
     position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
 `;
 
 const Title = styled.h1`
@@ -182,25 +183,24 @@ function App() {
     const newSocket = io('http://192.168.68.68:3000');
     setSocket(newSocket);
 
-    newSocket.on('detection', (data) => {
-      setDetection(data);
-    });
-
-    newSocket.on('servoStatus', (status) => {
-      setSystemStatus(status);
+    newSocket.on('connect', () => {
+        console.log('Socket connected');
     });
 
     newSocket.on('videoFrame', (frameData) => {
-      setVideoFrame(frameData);
+        console.log('Received frame, length:', frameData.length);
+        setVideoFrame(frameData);
+    });
+
+    newSocket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
     });
 
     return () => {
-      newSocket.off('detection');
-      newSocket.off('servoStatus');
-      newSocket.off('videoFrame');
-      newSocket.close();
+        console.log('Cleaning up socket connection');
+        newSocket.close();
     };
-  }, []);
+}, []);
 
   // Movement handlers remain the same
   const moveServoRelative = useCallback((pan, tilt) => {
@@ -267,16 +267,18 @@ function App() {
         <ControlCard>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
           <LiveFeedContainer>
-            {videoFrame ? (
-              <Video
-                src={`data:image/jpeg;base64,${videoFrame}`}
-                alt="Live Feed"
-              />
-            ) : (
-              <NoImage>Waiting for video feed...</NoImage>
-            )}
+              {videoFrame ? (
+                  <Video
+                      src={`data:image/jpeg;base64,${videoFrame}`}
+                      alt="Live Feed"
+                      onError={(e) => console.error('Video error:', e)}
+                      onLoad={() => console.log('Frame loaded successfully')}
+                  />
+              ) : (
+                  <NoImage>Waiting for video feed...</NoImage>
+              )}
           </LiveFeedContainer>
-        </ControlCard>
+      </ControlCard>
 
         {/* Controls section */}
         <ControlsWrapper>
