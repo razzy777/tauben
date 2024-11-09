@@ -32,12 +32,17 @@ const LiveFeedContainer = styled.div`
     }
     overflow: hidden;
     border-radius: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
 `;
 
 const Video = styled.img`
     position: absolute;
-    width: 100%;  // Ensure it fills the entire container width
+    top: 0;
+    left: 0;
+    width: 100%;
     height: 100%;
+    object-fit: cover;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
 
 
@@ -201,29 +206,31 @@ function App() {
   const [videoFrame, setVideoFrame] = useState(null);
 
   useEffect(() => {
-      const newSocket = io('http://192.168.68.68:3000');
-      setSocket(newSocket);
+    const newSocket = io('http://192.168.68.68:3000');
+    setSocket(newSocket);
 
-      newSocket.on('detection', (data) => {
-        setDetection(data);
-      });
-
-      newSocket.on('servoStatus', (status) => {
-        setSystemStatus(status);
-      });
-
-      // Add video frame handler
-      newSocket.on('videoFrame', (frameData) => {
+    newSocket.on('videoFrame', (frameData) => {
+        console.log('Received frame'); // Debug log
         setVideoFrame(frameData);
-      });
+    });
 
-      return () => {
-        newSocket.off('detection');
-        newSocket.off('servoStatus');
+    newSocket.on('connect', () => {
+        console.log('Socket connected');
+    });
+
+    newSocket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+    });
+
+    // ... rest of your socket handlers
+
+    return () => {
         newSocket.off('videoFrame');
+        newSocket.off('connect');
+        newSocket.off('connect_error');
         newSocket.close();
-      };
-  }, []);
+    };
+}, []);
 
   const moveServoRelative = useCallback((pan, tilt) => {
     if (socket) {
@@ -358,6 +365,7 @@ function App() {
                   <NoImage>Waiting for video feed...</NoImage>
               )}
           </LiveFeedContainer>
+
           
           {detection && detection.image && (
               <div>
