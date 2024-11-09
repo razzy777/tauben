@@ -241,6 +241,7 @@ function App() {
   const [detection, setDetection] = useState(null);
   const [socket, setSocket] = useState(null);
   const [keyStates, setKeyStates] = useState({});
+  const [keysPressed, setKeysPressed] = useState({});
   const [systemStatus, setSystemStatus] = useState(null);
   const [videoFrame, setVideoFrame] = useState(null);
   const [crosshairPosition, setCrosshairPosition] = useState({ x: 50, y: 50 }); // Start in center
@@ -248,7 +249,6 @@ function App() {
 
 
   const MOVEMENT_AMOUNT = 10;
-  const KEY_REPEAT_DELAY = 100;
 
   const moveCrosshair = useCallback((direction) => {
     setCrosshairPosition(prev => {
@@ -393,39 +393,17 @@ function App() {
   // Keyboard controls remain the same
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (keyStates[e.key]) return;
-  
-      setKeyStates(prev => ({ ...prev, [e.key]: true }));
-  
-      const moveBasedOnKey = () => {
-        switch (e.key) {
-          case 'ArrowUp':
-            moveServoRelative(0, MOVEMENT_AMOUNT);
-            break;
-          case 'ArrowDown':
-            moveServoRelative(0, -MOVEMENT_AMOUNT);
-            break;
-          case 'ArrowLeft':
-            moveServoRelative(MOVEMENT_AMOUNT, 0);
-            break;
-          case 'ArrowRight':
-            moveServoRelative(-MOVEMENT_AMOUNT, 0);
-            break;
-          default:
-            break;
-        }
-      };
-  
-      moveBasedOnKey();
-      keyIntervals.current[e.key] = setInterval(moveBasedOnKey, KEY_REPEAT_DELAY);
+      setKeysPressed((prevKeys) => ({
+        ...prevKeys,
+        [e.key]: true,
+      }));
     };
   
     const handleKeyUp = (e) => {
-      setKeyStates(prev => ({ ...prev, [e.key]: false }));
-      if (keyIntervals.current[e.key]) {
-        clearInterval(keyIntervals.current[e.key]);
-        delete keyIntervals.current[e.key];
-      }
+      setKeysPressed((prevKeys) => ({
+        ...prevKeys,
+        [e.key]: false,
+      }));
     };
   
     window.addEventListener('keydown', handleKeyDown);
@@ -434,10 +412,35 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      Object.values(keyIntervals.current).forEach(interval => clearInterval(interval));
     };
-  }, [moveServoRelative, keyStates]);
+  }, []);
+  useEffect(() => {
+    let animationFrameId;
   
+    const moveServos = () => {
+      if (keysPressed['ArrowUp']) {
+        moveServoRelative(0, MOVEMENT_AMOUNT);
+      }
+      if (keysPressed['ArrowDown']) {
+        moveServoRelative(0, -MOVEMENT_AMOUNT);
+      }
+      if (keysPressed['ArrowLeft']) {
+        moveServoRelative(MOVEMENT_AMOUNT, 0);
+      }
+      if (keysPressed['ArrowRight']) {
+        moveServoRelative(-MOVEMENT_AMOUNT, 0);
+      }
+      animationFrameId = requestAnimationFrame(moveServos);
+    };
+  
+    moveServos();
+  
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [keysPressed, moveServoRelative]);
+  
+    
 
   return (
     <Container>
