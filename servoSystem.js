@@ -82,6 +82,28 @@ class ServoSystem {
     });
   }
 
+  async moveToPositionAndWait(panPulse, tiltPulse) {
+    return new Promise((resolve, reject) => {
+      this.moveToPosition(panPulse, tiltPulse);
+  
+      const checkInterval = setInterval(() => {
+        const panDifference = Math.abs(this.currentPosition.pan - panPulse);
+        const tiltDifference = Math.abs(this.currentPosition.tilt - tiltPulse);
+  
+        if (panDifference < this.MIN_MOVEMENT_THRESHOLD && tiltDifference < this.MIN_MOVEMENT_THRESHOLD) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+  
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        reject(new Error('Movement timed out'));
+      }, 5000); // Timeout after 5 seconds
+    });
+  }
+  
+
   startQueueProcessing() {
     this.processQueue('pan');
     this.processQueue('tilt');

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import io from 'socket.io-client';
 import styled from 'styled-components';
 
@@ -298,28 +298,46 @@ function App() {
   }, [moveCrosshair]);
 
   const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY) => {
+    // Servo angle ranges
+    const PAN_MIN_ANGLE = -90;
+    const PAN_MAX_ANGLE = 90;
+    const TILT_MIN_ANGLE = -45;
+    const TILT_MAX_ANGLE = 45;
+  
     // Servo pulse ranges from servoSystem.js
     const PAN_MAX_LEFT_PULSE = 2000;
     const PAN_MAX_RIGHT_PULSE = 1200;
     const TILT_MAX_UP_PULSE = 2400;
     const TILT_MAX_DOWN_PULSE = 1350;
   
-    const panPulseRange = PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE;
-    const tiltPulseRange = TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE;
+    // Camera field of view
+    const CAMERA_FOV_HORIZONTAL = 60; // degrees
+    const CAMERA_FOV_VERTICAL = 40;   // degrees
   
-    // Map crosshairX (0-100%) to pan pulse
-    const panPulse = PAN_MAX_LEFT_PULSE - (crosshairX / 100) * panPulseRange;
+    // Calculate the pan and tilt angles corresponding to the crosshair position
+    const panAngle = 0 - (CAMERA_FOV_HORIZONTAL / 2) + (crosshairX / 100) * CAMERA_FOV_HORIZONTAL;
+    const tiltAngle = 0 + (CAMERA_FOV_VERTICAL / 2) - (crosshairY / 100) * CAMERA_FOV_VERTICAL;
   
-    // Map crosshairY (0-100%) to tilt pulse
-    const tiltPulse = TILT_MAX_UP_PULSE - (crosshairY / 100) * tiltPulseRange;
+    // Map panAngle to panPulse
+    const panPulse = ((panAngle - PAN_MIN_ANGLE) / (PAN_MAX_ANGLE - PAN_MIN_ANGLE)) * (PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE) + PAN_MAX_RIGHT_PULSE;
+  
+    // Map tiltAngle to tiltPulse
+    const tiltPulse = ((tiltAngle - TILT_MIN_ANGLE) / (TILT_MAX_ANGLE - TILT_MIN_ANGLE)) * (TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE) + TILT_MAX_DOWN_PULSE;
   
     // Apply offset to tiltPulse (aim higher)
-    const offsetPercentage = 10; // Adjust this value as needed
-    const adjustedTiltPulse = tiltPulse + (offsetPercentage / 100) * tiltPulseRange;
+    const offsetDegrees = 5; // Adjust this value as needed
+    const adjustedTiltAngle = tiltAngle + offsetDegrees;
   
-    return { panPulse, tiltPulse: adjustedTiltPulse };
+    // Recalculate adjusted tilt pulse
+    const adjustedTiltPulse = ((adjustedTiltAngle - TILT_MIN_ANGLE) / (TILT_MAX_ANGLE - TILT_MIN_ANGLE)) * (TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE) + TILT_MAX_DOWN_PULSE;
+  
+    // Ensure pulses are within valid ranges
+    const panPulseClamped = Math.min(Math.max(panPulse, PAN_MAX_RIGHT_PULSE), PAN_MAX_LEFT_PULSE);
+    const tiltPulseClamped = Math.min(Math.max(adjustedTiltPulse, TILT_MAX_DOWN_PULSE), TILT_MAX_UP_PULSE);
+  
+    return { panPulse: panPulseClamped, tiltPulse: tiltPulseClamped };
   };
-
+  
   const handleSprayWater = () => {
     const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairPosition.x, crosshairPosition.y);
   
@@ -370,16 +388,15 @@ function App() {
     setCrosshairPosition({ x, y });
   };
   
+  const keyIntervals = useRef({});
 
   // Keyboard controls remain the same
   useEffect(() => {
-    const keyIntervals = {};
-    
     const handleKeyDown = (e) => {
       if (keyStates[e.key]) return;
-      
+  
       setKeyStates(prev => ({ ...prev, [e.key]: true }));
-      
+  
       const moveBasedOnKey = () => {
         switch (e.key) {
           case 'ArrowUp':
@@ -398,30 +415,29 @@ function App() {
             break;
         }
       };
-
+  
       moveBasedOnKey();
-      keyIntervals[e.key] = setInterval(moveBasedOnKey, KEY_REPEAT_DELAY);
+      keyIntervals.current[e.key] = setInterval(moveBasedOnKey, KEY_REPEAT_DELAY);
     };
-
+  
     const handleKeyUp = (e) => {
       setKeyStates(prev => ({ ...prev, [e.key]: false }));
-      if (keyIntervals[e.key]) {
-        clearInterval(keyIntervals[e.key]);
-        delete keyIntervals[e.key];
+      if (keyIntervals.current[e.key]) {
+        clearInterval(keyIntervals.current[e.key]);
+        delete keyIntervals.current[e.key];
       }
     };
-    
-    
-
+  
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-
+  
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      Object.values(keyIntervals).forEach(interval => clearInterval(interval));
+      Object.values(keyIntervals.current).forEach(interval => clearInterval(interval));
     };
   }, [moveServoRelative, keyStates]);
+  
 
   return (
     <Container>
@@ -504,6 +520,10 @@ function App() {
               >
                 💧 Spray Water
               </ActionButton>
+              <ActionButton onClick={() => socket?.emit('startScan')}>
+                🔍 Scan
+              </ActionButton>
+
             </ActionButtonContainer>
 
             {systemStatus && (
