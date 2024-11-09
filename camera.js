@@ -1,10 +1,23 @@
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const tflite = require('@tensorflow/tfjs-node');
 
 // Existing folder and path definitions
 const folderPath = '/home/johannes/tauben/images';
 const imagePath = path.join(folderPath, 'test_picture.jpg');
+
+// Load the model
+const modelPath = path.join(__dirname, 'tflite_models', 'detect.tflite');
+let detectionModel;
+
+async function loadModel() {
+  const modelBuffer = fs.readFileSync(modelPath);
+  detectionModel = await tflite.loadTFLiteModel(modelBuffer);
+}
+
+loadModel();
+
 
 // Ensure directory exists with permissions
 if (!fs.existsSync(folderPath)) {
@@ -69,10 +82,33 @@ function startVideoStream(socket) {
             }
         });
 
-        // Add error logging
-        videoProcess.stderr.on('data', (data) => {
-            console.log('Camera stderr:', data.toString());
-        });
+		videoProcess.stdout.on('data', async (data) => {
+			buffer = Buffer.concat([buffer, data]);
+		
+			// Process frames
+			let start = buffer.indexOf(Buffer.from([0xFF, 0xD8]));
+			let end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));
+		
+			while (start !== -1 && end !== -1 && end > start) {
+			  const frame = buffer.slice(start, end + 2);
+			  buffer = buffer.slice(end + 2);
+		
+			  // Emit video frame
+			  socket.emit('videoFrame', frame.toString('base64'));
+		
+			  // Perform object detection
+			  const detections = await performObjectDetection(frame);
+		
+			  // Emit detections
+			  if (detections.length > 0) {
+				socket.emit('detections', detections);
+			  }
+		
+			  start = buffer.indexOf(Buffer.from([0xFF, 0xD8]));
+			  end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));
+			}
+		  });
+		
 
         videoProcess.on('error', (error) => {
             console.error('Camera process error:', error);
@@ -92,6 +128,46 @@ function stopVideoStream() {
         console.log('Video stream stopped');
     }
 }
+
+async function performObjectDetection(imageBuffer) {
+	if (!detectionModel) {
+	  console.error('Model not loaded yet.');
+	  return [];
+	}
+  
+	// Load image into tensor
+	const imageTensor = tf.node.decodeImage(imageBuffer, 3);
+	const resizedImage = tf.image.resizeBilinear(imageTensor, [300, 300]);
+	const normalizedImage = resizedImage.div(255.0).expandDims(0);
+  
+	// Run inference
+	const output = detectionModel.execute(normalizedImage);
+  
+	// Process output
+	const [boxes, classes, scores] = output;
+	const detections = [];
+  
+	for (let i = 0; i < scores.size; i++) {
+	  const score = scores.dataSync()[i];
+	  if (score > 0.5) {
+		const klass = classes.dataSync()[i];
+		if (klass === 1) { // 'person' class in COCO dataset
+		  const box = boxes.dataSync().slice(i * 4, (i + 1) * 4);
+		  detections.push({
+			class: 'person',
+			score,
+			box,
+		  });
+		}
+	  }
+	}
+  
+	// Clean up tensors
+	tf.dispose([imageTensor, resizedImage, normalizedImage, output]);
+  
+	return detections;
+  }
+  
 
 // Existing photo capture function
 async function captureImage() {

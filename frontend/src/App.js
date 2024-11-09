@@ -245,6 +245,7 @@ function App() {
   const [systemStatus, setSystemStatus] = useState(null);
   const [videoFrame, setVideoFrame] = useState(null);
   const [crosshairPosition, setCrosshairPosition] = useState({ x: 50, y: 50 }); // Start in center
+  const [detections, setDetections] = useState([]);
   const crosshairStep = 1; // Amount to move crosshair per keypress
 
 
@@ -346,6 +347,31 @@ function App() {
     }
   };
 
+  const adjustServosToFollow = (boundingBox) => {
+    // boundingBox format: [ymin, xmin, ymax, xmax] normalized between 0 and 1
+    const [ymin, xmin, ymax, xmax] = boundingBox;
+  
+    // Calculate center of bounding box
+    const centerX = (xmin + xmax) / 2;
+    const centerY = (ymin + ymax) / 2;
+  
+    // Map centerX and centerY to percentages
+    const crosshairX = centerX * 100;
+    const crosshairY = centerY * 100;
+  
+    // Update crosshair position (optional)
+    setCrosshairPosition({ x: crosshairX, y: crosshairY });
+  
+    // Map crosshair position to servo pulses
+    const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
+  
+    // Move servos to follow the person
+    if (socket) {
+      socket.emit('moveServoAbsolute', { panPulse, tiltPulse });
+    }
+  };
+  
+
 
 
   // Socket connection and event handlers remain the same
@@ -366,6 +392,18 @@ function App() {
     newSocket.on('connect_error', (error) => {
         console.error('Socket connection error:', error);
     });
+
+
+    socket.on('detections', (data) => {
+      setDetections(data);
+      if (data.length > 0) {
+        const personDetection = data.find(d => d.class === 'person');
+        if (personDetection) {
+          adjustServosToFollow(personDetection.box);
+        }
+      }
+    });
+    
 
     return () => {
         console.log('Cleaning up socket connection');

@@ -144,6 +144,14 @@ function handleSocketConnection(socket) {
       socket.emit('error', { message: 'Failed to move servo' });
     }
   });
+  socket.on('moveServoAbsolute', ({ panPulse, tiltPulse }) => {
+    try {
+      servoSystem.moveToPosition(panPulse, tiltPulse);
+    } catch (error) {
+      console.error('Error moving servos to absolute position:', error);
+    }
+  });
+  
 
   // Handle relative servo movement
   socket.on('moveServoRelative', ({ pan, tilt }) => {
