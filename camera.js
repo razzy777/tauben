@@ -1,7 +1,7 @@
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const tflite = require('@tensorflow/tfjs-node');
+const tflite = require('@tensorflow/tfjs');
 
 // Existing folder and path definitions
 const folderPath = '/home/johannes/tauben/images';
