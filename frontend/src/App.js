@@ -249,6 +249,7 @@ function App() {
   const crosshairStep = 1; // Amount to move crosshair per keypress
 
 
+
   const MOVEMENT_AMOUNT = 10;
 
   const moveCrosshair = useCallback((direction) => {

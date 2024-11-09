@@ -3,6 +3,60 @@ const socketIo = require('socket.io');
 const servoSystem = require('./servoSystem');
 const { captureImage, removeImage, startVideoStream, stopVideoStream } = require('./camera');
 
+const { io: ioClient } = require('socket.io-client');
+
+// Connect to the Python AI processor
+const aiSocket = ioClient('http://localhost:3000');  // Adjust the URL if necessary
+
+aiSocket.on('connect', () => {
+  console.log('Connected to AI processor');
+});
+
+aiSocket.on('aiDetections', (detections) => {
+  // Broadcast detections to connected clients
+  io.emit('detections', detections);
+
+  // Implement logic to move servos based on detections
+  if (detections && detections.length > 0) {
+    const personDetection = detections[0];  // Using the first detected person
+    adjustServosToFollow(personDetection.box);
+  }
+});
+
+aiSocket.on('disconnect', () => {
+  console.log('Disconnected from AI processor');
+});
+
+function adjustServosToFollow(boundingBox) {
+  const [ymin, xmin, ymax, xmax] = boundingBox;
+  const centerX = (xmin + xmax) / 2;
+  const centerY = (ymin + ymax) / 2;
+
+  // Map centerX and centerY to servo positions
+  const { panPulse, tiltPulse } = mapBoundingBoxToServoPulse(centerX, centerY);
+
+  // Move servos
+  servoSystem.moveToPosition(panPulse, tiltPulse);
+}
+
+function mapBoundingBoxToServoPulse(centerX, centerY) {
+    // Map normalized coordinates (0 to 1) to servo pulse ranges
+    const PAN_MAX_LEFT_PULSE = 2000;
+    const PAN_MAX_RIGHT_PULSE = 1200;
+    const TILT_MAX_UP_PULSE = 2400;
+    const TILT_MAX_DOWN_PULSE = 1350;
+  
+    const panPulseRange = PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE;
+    const tiltPulseRange = TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE;
+  
+    const panPulse = PAN_MAX_RIGHT_PULSE + centerX * panPulseRange;
+    const tiltPulse = TILT_MAX_DOWN_PULSE + centerY * tiltPulseRange;
+  
+    return { panPulse, tiltPulse };
+  }
+  
+
+
 const { ServoController } = require('./relay');
 const fs = require('fs');
 
