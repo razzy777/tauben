@@ -34,7 +34,7 @@ function startVideoStream(socket) {
         '--width', '1280',
         '--height', '720',
         '--framerate', '15',
-        '--rotation', '180',
+        //'--rotation', '180',
         '--inline',
         '--nopreview',
         '--timeout', '0',
