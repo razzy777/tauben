@@ -28,26 +28,23 @@ function startVideoStream(socket) {
 
     console.log('Starting video stream...');
     
-    // Use libcamera-vid with improved parameters
     const command = 'libcamera-vid';
-	const args = [
-		'--codec', 'mjpeg',
-		'--width', '1280',      // Change to a wider resolution
-		'--height', '720',      // 16:9 aspect ratio
-		'--framerate', '15',
-		'--rotation', '180', 
-		'--inline',
-		'--nopreview',
-		'--timeout', '0',
-		'--output', '-'
-	];
-	
+    const args = [
+        '--codec', 'mjpeg',
+        '--width', '1280',
+        '--height', '720',
+        '--framerate', '15',
+        '--rotation', '180',
+        '--inline',
+        '--nopreview',
+        '--timeout', '0',
+        '--output', '-'
+    ];
 
     try {
         videoProcess = spawn(command, args);
         let buffer = Buffer.from([]);
 
-        // Handle stdout data (video frames)
         videoProcess.stdout.on('data', (data) => {
             buffer = Buffer.concat([buffer, data]);
             
@@ -56,14 +53,14 @@ function startVideoStream(socket) {
             let end = 0;
             
             while (true) {
-                start = buffer.indexOf(Buffer.from([0xFF, 0xD8])); // JPEG start marker
-                end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));   // JPEG end marker
+                start = buffer.indexOf(Buffer.from([0xFF, 0xD8]));
+                end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));
                 
                 if (start !== -1 && end !== -1 && end > start) {
                     const frame = buffer.slice(start, end + 2);
-                    // Only emit if the frame is a valid size
-                    if (frame.length > 1000) { // Basic size check
+                    if (frame.length > 1000) {
                         socket.emit('videoFrame', frame.toString('base64'));
+                        console.log('Frame sent, size:', frame.length); // Debug log
                     }
                     buffer = buffer.slice(end + 2);
                 } else {
@@ -72,25 +69,13 @@ function startVideoStream(socket) {
             }
         });
 
-        // Handle stderr (debug messages)
+        // Add error logging
         videoProcess.stderr.on('data', (data) => {
-            const message = data.toString();
-            // Only log actual errors, not information messages
-            if (!message.includes('INFO') && !message.includes('#')) {
-                console.log('Video stream message:', message);
-            }
+            console.log('Camera stderr:', data.toString());
         });
 
-        // Handle process exit
-        videoProcess.on('close', (code) => {
-            console.log(`Video stream process exited with code ${code}`);
-            videoProcess = null;
-        });
-
-        // Handle process errors
-        videoProcess.on('error', (err) => {
-            console.error('Video stream process error:', err);
-            videoProcess = null;
+        videoProcess.on('error', (error) => {
+            console.error('Camera process error:', error);
         });
 
     } catch (error) {
