@@ -18,25 +18,35 @@ const Panel = styled.div`
   gap: 2rem;
 `;
 
+// Adjust LiveFeedContainer to have a 16:9 aspect ratio
 const LiveFeedContainer = styled.div`
-    position: relative;
-    width: 100%;
-    background: #000;
-    margin-bottom: 1rem;
-    &::before {
-        content: "";
-        display: block;
-        padding-top: 56.25%;
-    }
+  position: relative;
+  width: 100%;
+  background: #000;
+  margin-bottom: 1rem;
+  overflow: hidden;
+
+  &::before {
+    content: "";
+    display: block;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+  }
 `;
 
+// Ensure VideoOverlayContainer fills the parent
+const VideoOverlayContainer = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+`;
+
+
 const Video = styled.img`
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 `;
 
 const Title = styled.h1`
@@ -164,71 +174,67 @@ const NoImage = styled.div`
     color: #94a3b8;
 `;
 
-// Add these new styled components
-const VideoOverlayContainer = styled.div`
-    position: relative;
-    width: 100%;
-    height: 100%;
-`;
 
 const Crosshair = styled.div`
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  left: ${props => props.x}%;
+  top: ${props => props.y}%;
+
+  /* Crosshair styles */
+  &::before,
+  &::after {
+    content: '';
     position: absolute;
+    background-color: rgba(255, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+  }
+
+  &::before {
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    transform: translateY(-50%);
+  }
+
+  &::after {
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    transform: translateX(-50%);
+  }
+
+  .circle-outer {
+    position: absolute;
+    top: 50%;
+    left: 50%;
     width: 40px;
     height: 40px;
+    border: 2px solid rgba(255, 0, 0, 0.7);
+    border-radius: 50%;
     transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 10;
-    left: ${props => props.x}%;
-    top: ${props => props.y}%;
+  }
 
-    &::before,
-    &::after {
-        content: '';
-        position: absolute;
-        background-color: rgba(255, 0, 0, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.7);
-    }
-
-    &::before {
-        top: 50%;
-        left: 0;
-        right: 0;
-        height: 2px;
-        transform: translateY(-50%);
-    }
-
-    &::after {
-        left: 50%;
-        top: 0;
-        bottom: 0;
-        width: 2px;
-        transform: translateX(-50%);
-    }
-
-    /* Add circular elements */
-    .circle-outer {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 40px;
-        height: 40px;
-        border: 2px solid rgba(255, 0, 0, 0.7);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-    }
-
-    .circle-inner {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 10px;
-        height: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.7);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-        background-color: rgba(255, 0, 0, 0.3);
-    }
+  .circle-inner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(255, 0, 0, 0.3);
+  }
 `;
+
+
 
 
 function App() {
@@ -291,6 +297,37 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moveCrosshair]);
 
+  const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY) => {
+    // Servo pulse ranges from servoSystem.js
+    const PAN_MAX_LEFT_PULSE = 2000;
+    const PAN_MAX_RIGHT_PULSE = 1200;
+    const TILT_MAX_UP_PULSE = 2400;
+    const TILT_MAX_DOWN_PULSE = 1350;
+  
+    const panPulseRange = PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE;
+    const tiltPulseRange = TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE;
+  
+    // Map crosshairX (0-100%) to pan pulse
+    const panPulse = PAN_MAX_LEFT_PULSE - (crosshairX / 100) * panPulseRange;
+  
+    // Map crosshairY (0-100%) to tilt pulse
+    const tiltPulse = TILT_MAX_UP_PULSE - (crosshairY / 100) * tiltPulseRange;
+  
+    // Apply offset to tiltPulse (aim higher)
+    const offsetPercentage = 10; // Adjust this value as needed
+    const adjustedTiltPulse = tiltPulse + (offsetPercentage / 100) * tiltPulseRange;
+  
+    return { panPulse, tiltPulse: adjustedTiltPulse };
+  };
+
+  const handleSprayWater = () => {
+    const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairPosition.x, crosshairPosition.y);
+  
+    if (socket) {
+      socket.emit('moveToPositionAndSpray', { panPulse, tiltPulse, duration: 500 });
+    }
+  };
+
 
 
   // Socket connection and event handlers remain the same
@@ -303,9 +340,10 @@ function App() {
     });
 
     newSocket.on('videoFrame', (frameData) => {
-        console.log('Received frame, length:', frameData.length);
-        setVideoFrame(frameData);
+      console.log('Received frame, length:', frameData.length);
+      setVideoFrame(frameData);
     });
+  
 
     newSocket.on('connect_error', (error) => {
         console.error('Socket connection error:', error);
@@ -323,6 +361,15 @@ function App() {
       socket.emit('moveServoRelative', { pan, tilt });
     }
   }, [socket]);
+
+  const handleVideoClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+  
+    setCrosshairPosition({ x, y });
+  };
+  
 
   // Keyboard controls remain the same
   useEffect(() => {
@@ -363,6 +410,8 @@ function App() {
         delete keyIntervals[e.key];
       }
     };
+    
+    
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -383,19 +432,20 @@ function App() {
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
           <LiveFeedContainer>
             {videoFrame ? (
-                <VideoOverlayContainer>
-                    <Video
-                        src={`data:image/jpeg;base64,${videoFrame}`}
-                        alt="Live Feed"
-                    />
-                    <Crosshair 
-                        x={crosshairPosition.x} 
-                        y={crosshairPosition.y}
-                    >
-                        <div className="circle-outer" />
-                        <div className="circle-inner" />
-                    </Crosshair>
-                </VideoOverlayContainer>
+              <VideoOverlayContainer onClick={handleVideoClick}>
+                <Video
+                  src={`data:image/jpeg;base64,${videoFrame}`}
+                  alt="Live Feed"
+                  onError={(e) => console.error('Image failed to load:', e)}
+                />
+                <Crosshair 
+                  x={crosshairPosition.x} 
+                  y={crosshairPosition.y}
+                >
+                  <div className="circle-outer" />
+                  <div className="circle-inner" />
+                </Crosshair>
+              </VideoOverlayContainer>
             ) : (
                 <NoImage>Waiting for video feed...</NoImage>
             )}
@@ -449,10 +499,10 @@ function App() {
                 📸 Take Photo
               </ActionButton>
               <ActionButton 
-                onClick={() => socket?.emit('activateWater', 500)}
+                onClick={handleSprayWater}
                 water
               >
-                💧 Water
+                💧 Spray Water
               </ActionButton>
             </ActionButtonContainer>
 

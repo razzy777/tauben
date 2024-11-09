@@ -182,6 +182,23 @@ function handleSocketConnection(socket) {
     }
   });
 
+  socket.on('moveToPositionAndSpray', async ({ panPulse, tiltPulse, duration }) => {
+    try {
+      console.log(`Moving servos to pan=${panPulse}, tilt=${tiltPulse}, then activating water for ${duration}ms`);
+      // Move servos
+      servoSystem.moveToPosition(panPulse, tiltPulse);
+      // Wait for servos to reach position
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Adjust delay as needed
+      // Activate water
+      await relayController.activateWater(duration);
+      socket.emit('waterActivated', { success: true });
+    } catch (error) {
+      console.error('Error moving servos and activating water:', error);
+      socket.emit('error', { message: 'Failed to move servos and activate water' });
+    }
+  });
+  
+
   // Handle client disconnect
   socket.on('disconnect', () => {
     stopVideoStream(); // Stop video stream when client disconnects
