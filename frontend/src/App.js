@@ -164,9 +164,72 @@ const NoImage = styled.div`
     color: #94a3b8;
 `;
 
-const CapturesSection = styled.div`
-  margin-top: 2rem;
+// Add these new styled components
+const VideoOverlayContainer = styled.div`
+    position: relative;
+    width: 100%;
+    height: 100%;
 `;
+
+const Crosshair = styled.div`
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 10;
+    left: ${props => props.x}%;
+    top: ${props => props.y}%;
+
+    &::before,
+    &::after {
+        content: '';
+        position: absolute;
+        background-color: rgba(255, 0, 0, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.7);
+    }
+
+    &::before {
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        transform: translateY(-50%);
+    }
+
+    &::after {
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        transform: translateX(-50%);
+    }
+
+    /* Add circular elements */
+    .circle-outer {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 40px;
+        height: 40px;
+        border: 2px solid rgba(255, 0, 0, 0.7);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    .circle-inner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 10px;
+        height: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(255, 0, 0, 0.3);
+    }
+`;
+
 
 function App() {
   const [detection, setDetection] = useState(null);
@@ -174,9 +237,61 @@ function App() {
   const [keyStates, setKeyStates] = useState({});
   const [systemStatus, setSystemStatus] = useState(null);
   const [videoFrame, setVideoFrame] = useState(null);
+  const [crosshairPosition, setCrosshairPosition] = useState({ x: 50, y: 50 }); // Start in center
+  const crosshairStep = 1; // Amount to move crosshair per keypress
+
 
   const MOVEMENT_AMOUNT = 10;
   const KEY_REPEAT_DELAY = 100;
+
+  const moveCrosshair = useCallback((direction) => {
+    setCrosshairPosition(prev => {
+        const newPos = { ...prev };
+        switch (direction) {
+            case 'up':
+                newPos.y = Math.max(0, prev.y - crosshairStep);
+                break;
+            case 'down':
+                newPos.y = Math.min(100, prev.y + crosshairStep);
+                break;
+            case 'left':
+                newPos.x = Math.max(0, prev.x - crosshairStep);
+                break;
+            case 'right':
+                newPos.x = Math.min(100, prev.x + crosshairStep);
+                break;
+            default:
+                break;
+        }
+        return newPos;
+    });
+  }, [crosshairStep]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+        switch(e.key) {
+            case 'w':
+                moveCrosshair('up');
+                break;
+            case 's':
+                moveCrosshair('down');
+                break;
+            case 'a':
+                moveCrosshair('left');
+                break;
+            case 'd':
+                moveCrosshair('right');
+                break;
+            default:
+                break;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [moveCrosshair]);
+
+
 
   // Socket connection and event handlers remain the same
   useEffect(() => {
@@ -267,17 +382,24 @@ function App() {
         <ControlCard>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
           <LiveFeedContainer>
-              {videoFrame ? (
-                  <Video
-                      src={`data:image/jpeg;base64,${videoFrame}`}
-                      alt="Live Feed"
-                      onError={(e) => console.error('Video error:', e)}
-                      onLoad={() => console.log('Frame loaded successfully')}
-                  />
-              ) : (
-                  <NoImage>Waiting for video feed...</NoImage>
-              )}
-          </LiveFeedContainer>
+            {videoFrame ? (
+                <VideoOverlayContainer>
+                    <Video
+                        src={`data:image/jpeg;base64,${videoFrame}`}
+                        alt="Live Feed"
+                    />
+                    <Crosshair 
+                        x={crosshairPosition.x} 
+                        y={crosshairPosition.y}
+                    >
+                        <div className="circle-outer" />
+                        <div className="circle-inner" />
+                    </Crosshair>
+                </VideoOverlayContainer>
+            ) : (
+                <NoImage>Waiting for video feed...</NoImage>
+            )}
+        </LiveFeedContainer>
       </ControlCard>
 
         {/* Controls section */}
