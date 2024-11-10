@@ -268,9 +268,9 @@ class ServoSystem {
       if (this.queues.pan.length < this.MAX_QUEUE_SIZE) {
         // Add relative movement to queue
         this.queues.pan.push({ 
-          pulse: this.currentPosition.pan + panPulseRel,
+          pulse: this.currentPosition.pan + Math.round(panPulseRel),
           isRelative: true,
-          relativeDelta: panPulseRel
+          relativeDelta: Math.round(panPulseRel)
         });
       }
     }
@@ -279,9 +279,9 @@ class ServoSystem {
       if (this.queues.tilt.length < this.MAX_QUEUE_SIZE) {
         // Add relative movement to queue
         this.queues.tilt.push({ 
-          pulse: this.currentPosition.tilt + tiltPulseRel,
+          pulse: this.currentPosition.tilt + Math.round(tiltPulseRel),
           isRelative: true,
-          relativeDelta: tiltPulseRel
+          relativeDelta: Math.round(tiltPulseRel)
         });
       }
     }
