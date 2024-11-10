@@ -251,7 +251,7 @@ function App() {
 
 
 
-  const MOVEMENT_AMOUNT = 10;
+  const MOVEMENT_AMOUNT = 5;
 
   const moveCrosshair = useCallback((direction) => {
     setCrosshairPosition(prev => {
