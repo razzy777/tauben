@@ -11,9 +11,9 @@ class ServoSystem {
     };
 
     // Servo configuration
-    this.TILT_MAX_DOWN_PULSE = 1350;
+    this.TILT_MAX_DOWN_PULSE = 1450;
     this.TILT_MAX_UP_PULSE = 2400;
-    this.PAN_MAX_RIGHT_PULSE = 1200;
+    this.PAN_MAX_RIGHT_PULSE = 1100;
     this.PAN_MAX_LEFT_PULSE = 2400;
 
     this.TILT_CENTER_PULSE = Math.round((this.TILT_MAX_DOWN_PULSE + this.TILT_MAX_UP_PULSE) / 2);
