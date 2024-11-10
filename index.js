@@ -1,3 +1,4 @@
+// server.js
 const http = require('http');
 const socketIo = require('socket.io');
 const fs = require('fs');
@@ -55,27 +56,39 @@ function adjustServosToFollow(boundingBox) {
   const centerX = (xmin + xmax) / 2;
   const centerY = (ymin + ymax) / 2;
 
-  // Map centerX and centerY to servo positions
-  const { panPulse, tiltPulse } = mapBoundingBoxToServoPulse(centerX, centerY);
+  // Map centerX and centerY to servo pulse deltas
+  const { panDelta, tiltDelta } = mapBoundingBoxToServoDelta(centerX, centerY);
 
-  // Move servos
-  servoSystem.moveToPosition(panPulse, tiltPulse);
+  // Move servos relatively
+  servoSystem.moveToPositionRelative(panDelta, tiltDelta);
 }
 
-function mapBoundingBoxToServoPulse(centerX, centerY) {
-  // Map normalized coordinates (0 to 1) to servo pulse ranges
-  const PAN_MAX_LEFT_PULSE = 2000;
-  const PAN_MAX_RIGHT_PULSE = 1200;
-  const TILT_MAX_UP_PULSE = 2400;
-  const TILT_MAX_DOWN_PULSE = 1350;
+function mapBoundingBoxToServoDelta(centerX, centerY) {
+  // Constants for maximum step sizes (adjust as needed)
+  const MAX_PAN_DELTA = 10;   // Maximum pulse delta for pan
+  const MAX_TILT_DELTA = 10;  // Maximum pulse delta for tilt
 
-  const panPulseRange = PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE;
-  const tiltPulseRange = TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE;
+  // Calculate deviations from the center (normalized between -0.5 and 0.5)
+  const deltaX = centerX - 0.5; // Positive if object is to the right
+  const deltaY = centerY - 0.5; // Positive if object is below the center
 
-  const panPulse = PAN_MAX_RIGHT_PULSE + centerX * panPulseRange;
-  const tiltPulse = TILT_MAX_DOWN_PULSE + centerY * tiltPulseRange;
+  // Multiply by 2 to get range from -1 to 1
+  const normalizedDeltaX = deltaX * 2;
+  const normalizedDeltaY = deltaY * 2;
 
-  return { panPulse, tiltPulse };
+  // Calculate pulse deltas proportional to the normalized deviations
+  const panDelta = normalizedDeltaX * MAX_PAN_DELTA;
+  const tiltDelta = -normalizedDeltaY * MAX_TILT_DELTA; // Negative to adjust for coordinate system
+
+  // Debugging statements
+  console.log('deltaX:', deltaX);
+  console.log('deltaY:', deltaY);
+  console.log('normalizedDeltaX:', normalizedDeltaX);
+  console.log('normalizedDeltaY:', normalizedDeltaY);
+  console.log('panDelta:', panDelta);
+  console.log('tiltDelta:', tiltDelta);
+
+  return { panDelta, tiltDelta };
 }
 
 // Perform initial servo movement test
