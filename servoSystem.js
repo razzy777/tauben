@@ -264,6 +264,9 @@ class ServoSystem {
 
   moveToPositionRelative(panPulseRel, tiltPulseRel) {
     console.log('start, pan ', panPulseRel, '   tilt: ', tiltPulseRel)
+    console.log('this.queues.pan.length ', this.queues.pan.length, '   this.MAX_QUEUE_SIZE: ', this.MAX_QUEUE_SIZE)
+
+
     if (panPulseRel) {
       if (this.queues.pan.length < this.MAX_QUEUE_SIZE) {
         // Add relative movement to queue
