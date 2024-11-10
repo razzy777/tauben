@@ -14,7 +14,7 @@ class ServoSystem {
     this.TILT_MAX_DOWN_PULSE = 1350;
     this.TILT_MAX_UP_PULSE = 2400;
     this.PAN_MAX_RIGHT_PULSE = 1200;
-    this.PAN_MAX_LEFT_PULSE = 2000;
+    this.PAN_MAX_LEFT_PULSE = 2500;
 
     this.TILT_CENTER_PULSE = Math.round((this.TILT_MAX_DOWN_PULSE + this.TILT_MAX_UP_PULSE) / 2);
     this.PAN_CENTER_PULSE = Math.round((this.PAN_MAX_RIGHT_PULSE + this.PAN_MAX_LEFT_PULSE) / 2);
@@ -263,10 +263,6 @@ class ServoSystem {
   }
 
   moveToPositionRelative(panPulseRel, tiltPulseRel) {
-    console.log('start, pan ', panPulseRel, '   tilt: ', tiltPulseRel)
-    console.log('this.queues.pan.length ', this.queues.pan.length, '   this.MAX_QUEUE_SIZE: ', this.MAX_QUEUE_SIZE)
-
-
     if (panPulseRel) {
       if (this.queues.pan.length < this.MAX_QUEUE_SIZE) {
         // Add relative movement to queue
