@@ -266,22 +266,24 @@ class ServoSystem {
     console.log('panPulseRel, tiltPulseRel',panPulseRel, tiltPulseRel )
     if (panPulseRel) {
       if (this.queues.pan.length < this.MAX_QUEUE_SIZE) {
+        console.log('panPulseRelpanPulseRel', panPulseRel)
         // Add relative movement to queue
         this.queues.pan.push({ 
-          pulse: this.currentPosition.pan + 1,
+          pulse: this.currentPosition.pan + panPulseRel,
           isRelative: true,
-          relativeDelta: 1
+          relativeDelta: panPulseRel
         });
       }
     }
 
     if (tiltPulseRel) {
       if (this.queues.tilt.length < this.MAX_QUEUE_SIZE) {
+        console.log('tiltPulseReltiltPulseRel', tiltPulseRel)
         // Add relative movement to queue
         this.queues.tilt.push({ 
-          pulse: this.currentPosition.tilt + 1,
+          pulse: this.currentPosition.tilt + tiltPulseRel,
           isRelative: true,
-          relativeDelta: 1
+          relativeDelta: tiltPulseRel
         });
       }
     }
