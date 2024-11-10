@@ -387,8 +387,11 @@ function App() {
     setCrosshairPosition({ x: crosshairX, y: crosshairY });
   
     // Map crosshair position to servo pulse
+    console.log('centerX, ', centerX, 'centerY' , centerY)
+
+    console.log('crosshairX, ', crosshairX, 'TILt' , crosshairY)
+
     const { panPulseDelta, tiltPulseDelta } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
-    console.log('panPulse, ', panPulseDelta, 'TILt' , tiltPulseDelta)
 
 
   
