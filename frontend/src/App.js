@@ -382,13 +382,14 @@ function App() {
     setCrosshairPosition({ x: crosshairX, y: crosshairY });
   
     // Map crosshair position to servo pulse
-    const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
-    console.log('panPulse, ', panPulse, 'TILt' , tiltPulse)
+    const { panPulseDelta, tiltPulseDelta } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
+    console.log('panPulse, ', panPulseDelta, 'TILt' , tiltPulseDelta)
 
+    
   
     // Move servos to follow the person
     if (socket) {
-      socket.emit('moveServoRelative', { panPulse, tiltPulse });
+      socket.emit('moveServoRelative', { pan: panPulseDelta, tilt: tiltPulseDelta });
     }
   };
   
