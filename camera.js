@@ -30,7 +30,7 @@ function startVideoStream(frontendNamespace, aiNamespace) {
 
     // Variables to handle AI frame interval
     let lastAIFrameTime = 0;
-    const aiFrameRate = 1; // Send frame to AI processor every 1 second
+    const aiFrameRate = 2; // Send frame to AI processor every 1 second
 
     videoProcess.stdout.on('data', (data) => {
       buffer = Buffer.concat([buffer, data]);
@@ -52,7 +52,7 @@ function startVideoStream(frontendNamespace, aiNamespace) {
             const currentTime = Date.now();
             if (currentTime - lastAIFrameTime >= aiFrameRate * 1000) {
               aiNamespace.emit('videoFrame', frame);
-              console.log('Sent frame to AI processor'); // Add logging
+              //console.log('Sent frame to AI processor'); // Add logging
               lastAIFrameTime = currentTime;
             }
           }
