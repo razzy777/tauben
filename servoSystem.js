@@ -263,14 +263,14 @@ class ServoSystem {
   }
 
   moveToPositionRelative(panPulseRel, tiltPulseRel) {
-    console.log('panPulseRel, tiltPulseRel', Math.round(panPulseRel), Math.round(tiltPulseRel) )
+    console.log('panPulseRel, tiltPulseRel',panPulseRel, tiltPulseRel )
     if (panPulseRel) {
       if (this.queues.pan.length < this.MAX_QUEUE_SIZE) {
         // Add relative movement to queue
         this.queues.pan.push({ 
-          pulse: this.currentPosition.pan + Math.round(panPulseRel),
+          pulse: this.currentPosition.pan + 1,
           isRelative: true,
-          relativeDelta: Math.round(panPulseRel)
+          relativeDelta: 1
         });
       }
     }
@@ -279,9 +279,9 @@ class ServoSystem {
       if (this.queues.tilt.length < this.MAX_QUEUE_SIZE) {
         // Add relative movement to queue
         this.queues.tilt.push({ 
-          pulse: this.currentPosition.tilt + Math.round(tiltPulseRel),
+          pulse: this.currentPosition.tilt + 1,
           isRelative: true,
-          relativeDelta: Math.round(tiltPulseRel)
+          relativeDelta: 1
         });
       }
     }
