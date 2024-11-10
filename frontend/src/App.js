@@ -354,7 +354,9 @@ function App() {
     // Clamp the deltas to the maximum step size
     panPulseDelta = Math.max(Math.min(panPulseDelta, MAX_PAN_PULSE_STEP), -MAX_PAN_PULSE_STEP);
     tiltPulseDelta = Math.max(Math.min(tiltPulseDelta, MAX_TILT_PULSE_STEP), -MAX_TILT_PULSE_STEP);
-  
+    console.log('DDAAA PAN', panPulseDelta)
+    console.log('DDAAA TILT', tiltPulseDelta)
+
     return { panPulseDelta, tiltPulseDelta };
   };
     
@@ -385,7 +387,7 @@ function App() {
     const { panPulseDelta, tiltPulseDelta } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
     console.log('panPulse, ', panPulseDelta, 'TILt' , tiltPulseDelta)
 
-    
+
   
     // Move servos to follow the person
     if (socket) {
