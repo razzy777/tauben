@@ -13,22 +13,26 @@ input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 print("Model loaded successfully")
 
-@sio.event
+# Event handler for connecting to the /ai namespace
+@sio.event(namespace='/ai')
 def connect():
-    print('Connected to Node.js server')
+    print('Connected to AI namespace on Node.js server')
 
-@sio.event
+# Event handler for disconnecting from the /ai namespace
+@sio.event(namespace='/ai')
 def disconnect():
-    print('Disconnected from Node.js server')
+    print('Disconnected from AI namespace on Node.js server')
 
+# Event handler for connection errors
 @sio.event
 def connect_error(data):
     print("Connection failed:", data)
 
 # Event handler for receiving video frames
-@sio.on('videoFrame')
+@sio.on('videoFrame', namespace='/ai')
 def on_video_frame(data):
     print("Received frame from Node.js")  # Add logging
+
     # Convert the received frame data to a NumPy array
     nparr = np.frombuffer(data, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -67,12 +71,12 @@ def on_video_frame(data):
     # Emit detections to the Node.js server
     if detections:
         print("Emitting detections:", detections)
-        sio.emit('aiDetections', detections)
+        sio.emit('aiDetections', detections, namespace='/ai')
 
 def main():
     try:
-        # Connect to the Node.js server (use /ai namespace)
-        sio.connect('http://localhost:3000/ai')  # Ensure the namespace is correct
+        # Connect to the Node.js server, specifying the namespace
+        sio.connect('http://localhost:3000', namespaces=['/ai'])
         sio.wait()  # Keep the script running to listen for events
 
     except Exception as e:
