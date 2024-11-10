@@ -55,7 +55,7 @@ def on_video_frame(data):
     # Process detections
     detections = []
     for i in range(len(scores)):
-        if scores[i] > 0.5 and classes[i] == 0:
+        if scores[i] > 0.1 and classes[i] == 0:
             ymin, xmin, ymax, xmax = boxes[i]
             detections.append({
                 'class': 'person',
