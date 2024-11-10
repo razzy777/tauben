@@ -307,47 +307,57 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moveCrosshair]);
 
-  const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY) => {
-    // Servo angle ranges
+  const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY, currentPanPulse, currentTiltPulse) => {
+    // Constants
     const PAN_MIN_ANGLE = -90;
     const PAN_MAX_ANGLE = 90;
-    const TILT_MIN_ANGLE = -45;
-    const TILT_MAX_ANGLE = 45;
+    const TILT_MIN_ANGLE = -70; // Adjust based on total tilt range
+    const TILT_MAX_ANGLE = 70;  // Adjust based on total tilt range
   
-    // Servo pulse ranges from servoSystem.js
+    // Servo pulse ranges
     const PAN_MAX_LEFT_PULSE = 2000;
     const PAN_MAX_RIGHT_PULSE = 1200;
-    const TILT_MAX_UP_PULSE = 2400;
-    const TILT_MAX_DOWN_PULSE = 1350;
+    const TILT_MAX_UP_PULSE = 1350;   // Up corresponds to minimum pulse
+    const TILT_MAX_DOWN_PULSE = 2400; // Down corresponds to maximum pulse
   
     // Camera field of view
     const CAMERA_FOV_HORIZONTAL = 60; // degrees
     const CAMERA_FOV_VERTICAL = 40;   // degrees
   
-    // Calculate the pan and tilt angles corresponding to the crosshair position
-    const panAngle = 0 - (CAMERA_FOV_HORIZONTAL / 2) + (crosshairX / 100) * CAMERA_FOV_HORIZONTAL;
-    const tiltAngle = 0 + (CAMERA_FOV_VERTICAL / 2) - (crosshairY / 100) * CAMERA_FOV_VERTICAL;
+    // Calculate angular offsets from the center
+    const panAngleOffset = ((crosshairX - 50) / 50) * (CAMERA_FOV_HORIZONTAL / 2);
+    const tiltAngleOffset = ((crosshairY - 50) / 50) * (CAMERA_FOV_VERTICAL / 2);
   
-    // Map panAngle to panPulse
-    const panPulse = ((panAngle - PAN_MIN_ANGLE) / (PAN_MAX_ANGLE - PAN_MIN_ANGLE)) * (PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE) + PAN_MAX_RIGHT_PULSE;
+    // Desired pan and tilt angles (assuming current angle is 0)
+    const desiredPanAngle = panAngleOffset;
+    const desiredTiltAngle = -tiltAngleOffset; // Negative because Y-axis might be inverted
   
-    // Map tiltAngle to tiltPulse
-    const tiltPulse = ((tiltAngle - TILT_MIN_ANGLE) / (TILT_MAX_ANGLE - TILT_MIN_ANGLE)) * (TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE) + TILT_MAX_DOWN_PULSE;
+    // Map desired angles to servo pulses
+    const panPulseDesired =
+      PAN_MAX_LEFT_PULSE +
+      ((desiredPanAngle - PAN_MIN_ANGLE) * (PAN_MAX_RIGHT_PULSE - PAN_MAX_LEFT_PULSE)) /
+        (PAN_MAX_ANGLE - PAN_MIN_ANGLE);
   
-    // Apply offset to tiltPulse (aim higher)
-    const offsetDegrees = 5; // Adjust this value as needed
-    const adjustedTiltAngle = tiltAngle + offsetDegrees;
+    const tiltPulseDesired =
+      TILT_MAX_UP_PULSE +
+      ((desiredTiltAngle - TILT_MIN_ANGLE) * (TILT_MAX_DOWN_PULSE - TILT_MAX_UP_PULSE)) /
+        (TILT_MAX_ANGLE - TILT_MIN_ANGLE);
   
-    // Recalculate adjusted tilt pulse
-    const adjustedTiltPulse = ((adjustedTiltAngle - TILT_MIN_ANGLE) / (TILT_MAX_ANGLE - TILT_MIN_ANGLE)) * (TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE) + TILT_MAX_DOWN_PULSE;
+    // Compute the difference from current pulses
+    let panPulseDelta = panPulseDesired - currentPanPulse;
+    let tiltPulseDelta = tiltPulseDesired - currentTiltPulse;
   
-    // Ensure pulses are within valid ranges
-    const panPulseClamped = Math.min(Math.max(panPulse, PAN_MAX_RIGHT_PULSE), PAN_MAX_LEFT_PULSE);
-    const tiltPulseClamped = Math.min(Math.max(adjustedTiltPulse, TILT_MAX_DOWN_PULSE), TILT_MAX_UP_PULSE);
+    // Limit the maximum step size for smoother movement
+    const MAX_PAN_PULSE_STEP = 10; // Adjust this value as needed
+    const MAX_TILT_PULSE_STEP = 10; // Adjust this value as needed
   
-    return { panPulse: panPulseClamped, tiltPulse: tiltPulseClamped };
+    // Clamp the deltas to the maximum step size
+    panPulseDelta = Math.max(Math.min(panPulseDelta, MAX_PAN_PULSE_STEP), -MAX_PAN_PULSE_STEP);
+    tiltPulseDelta = Math.max(Math.min(tiltPulseDelta, MAX_TILT_PULSE_STEP), -MAX_TILT_PULSE_STEP);
+  
+    return { panPulseDelta, tiltPulseDelta };
   };
-  
+    
   const handleSprayWater = () => {
     const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairPosition.x, crosshairPosition.y);
   
@@ -363,21 +373,6 @@ function App() {
     // Calculate center of bounding box
     const centerX = (xmin + xmax) / 2;
     const centerY = (ymin + ymax) / 2;
-
-
-    // These are the values of the bounding box (example):
-  /*  0
-: 
-0.5552987456321716
-1
-: 
-0.5001413822174072
-2
-: 
-0.9882187247276306
-3
-: 
-0.9837093*/
   
     // Map centerX and centerY to percentages
     const crosshairX = centerX * 100;
@@ -386,18 +381,14 @@ function App() {
     // Update crosshair position (optional)
     setCrosshairPosition({ x: crosshairX, y: crosshairY });
   
-    // Map crosshair position to servo pulses
-    console.log('boundingBoxboundingBox', boundingBox)
-    console.log('crosshairX', crosshairX)
-    console.log('crosshairY', crosshairY)
-
+    // Map crosshair position to servo pulse
     const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
     console.log('panPulse, ', panPulse, 'TILt' , tiltPulse)
 
   
     // Move servos to follow the person
     if (socket) {
-      socket.emit('moveServoAbsolute', { panPulse, tiltPulse });
+      socket.emit('moveServoRelative', { panPulse, tiltPulse });
     }
   };
   
