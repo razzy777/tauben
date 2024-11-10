@@ -61,7 +61,9 @@ function adjustServosToFollow(boundingBox) {
 
   // Move servos relatively
   servoSystem.moveToPositionRelative(panDelta, tiltDelta);
+  
 }
+
 
 function mapBoundingBoxToServoDelta(centerX, centerY) {
   // Constants for maximum step sizes (adjust as needed)
@@ -79,14 +81,6 @@ function mapBoundingBoxToServoDelta(centerX, centerY) {
   // Calculate pulse deltas proportional to the normalized deviations
   const panDelta = normalizedDeltaX * MAX_PAN_DELTA;
   const tiltDelta = -normalizedDeltaY * MAX_TILT_DELTA; // Negative to adjust for coordinate system
-
-  // Debugging statements
-  console.log('deltaX:', deltaX);
-  console.log('deltaY:', deltaY);
-  console.log('normalizedDeltaX:', normalizedDeltaX);
-  console.log('normalizedDeltaY:', normalizedDeltaY);
-  console.log('panDelta:', panDelta);
-  console.log('tiltDelta:', tiltDelta);
 
   return { panDelta, tiltDelta };
 }
