@@ -28,6 +28,7 @@ def connect_error(data):
 # Event handler for receiving video frames
 @sio.on('videoFrame')
 def on_video_frame(data):
+    print("Received frame from Node.js")  # Add logging
     # Convert the received frame data to a NumPy array
     nparr = np.frombuffer(data, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -71,7 +72,7 @@ def on_video_frame(data):
 def main():
     try:
         # Connect to the Node.js server (use /ai namespace)
-        sio.connect('http://localhost:3000/ai')
+        sio.connect('http://localhost:3000/ai')  # Ensure the namespace is correct
         sio.wait()  # Keep the script running to listen for events
 
     except Exception as e:

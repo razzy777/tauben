@@ -1,8 +1,8 @@
+// camera.js
 
 const { spawn } = require('child_process');
 
 let videoProcess = null;
-let aiFrameInterval = null;
 
 function startVideoStream(frontendNamespace, aiNamespace) {
   if (videoProcess) {
@@ -15,8 +15,8 @@ function startVideoStream(frontendNamespace, aiNamespace) {
   const command = 'libcamera-vid';
   const args = [
     '--codec', 'mjpeg',
-    '--width', '1920',
-    '--height', '1080',
+    '--width', '1280',
+    '--height', '720',
     '--framerate', '15',
     '--inline',
     '--nopreview',
@@ -52,6 +52,7 @@ function startVideoStream(frontendNamespace, aiNamespace) {
             const currentTime = Date.now();
             if (currentTime - lastAIFrameTime >= aiFrameRate * 1000) {
               aiNamespace.emit('videoFrame', frame);
+              console.log('Sent frame to AI processor'); // Add logging
               lastAIFrameTime = currentTime;
             }
           }
