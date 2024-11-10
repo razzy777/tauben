@@ -15,9 +15,9 @@ function startVideoStream(frontendNamespace, aiNamespace) {
   const command = 'libcamera-vid';
   const args = [
     '--codec', 'mjpeg',
-    '--width', '1920',
-    '--height', '1080',
-    '--framerate', '15',
+    '--width', '640',
+    '--height', '480',
+    '--framerate', '30',
     '--inline',
     '--nopreview',
     '--timeout', '0',
