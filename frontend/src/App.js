@@ -307,62 +307,38 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [moveCrosshair]);
 
-  const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY, currentPanPulse, currentTiltPulse) => {
-    // Constants
-    console.log('INPUT CROSSX', crosshairX)
-    console.log('INPUT crosshairY', crosshairY)
-
-    const PAN_MIN_ANGLE = -90;
-    const PAN_MAX_ANGLE = 90;
-    const TILT_MIN_ANGLE = -70; // Adjust based on total tilt range
-    const TILT_MAX_ANGLE = 70;  // Adjust based on total tilt range
+  const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY) => {
+    // Constants for maximum step sizes (adjust as needed)
+    const MAX_PAN_PULSE_STEP = 10;
+    const MAX_TILT_PULSE_STEP = 10;
   
-    // Servo pulse ranges
-    const PAN_MAX_LEFT_PULSE = 2000;
-    const PAN_MAX_RIGHT_PULSE = 1200;
-    const TILT_MAX_UP_PULSE = 1350;   // Up corresponds to minimum pulse
-    const TILT_MAX_DOWN_PULSE = 2400; // Down corresponds to maximum pulse
+    // Compute the deviation from the center (range: -50 to +50)
+    const deltaX = crosshairX - 50; // Positive if crosshair is to the right
+    const deltaY = crosshairY - 50; // Positive if crosshair is below the center
   
-    // Camera field of view
-    const CAMERA_FOV_HORIZONTAL = 60; // degrees
-    const CAMERA_FOV_VERTICAL = 40;   // degrees
+    // Normalize the deviations to a range of -1 to +1
+    const normalizedDeltaX = deltaX / 50;
+    const normalizedDeltaY = deltaY / 50;
   
-    // Calculate angular offsets from the center
-    const panAngleOffset = ((crosshairX - 50) / 50) * (CAMERA_FOV_HORIZONTAL / 2);
-    const tiltAngleOffset = ((crosshairY - 50) / 50) * (CAMERA_FOV_VERTICAL / 2);
+    // Calculate pulse deltas proportional to the normalized deviations
+    const panPulseDelta = normalizedDeltaX * MAX_PAN_PULSE_STEP;
+    const tiltPulseDelta = -normalizedDeltaY * MAX_TILT_PULSE_STEP; // Negative to adjust for coordinate system
   
-    // Desired pan and tilt angles (assuming current angle is 0)
-    const desiredPanAngle = panAngleOffset;
-    const desiredTiltAngle = -tiltAngleOffset; // Negative because Y-axis might be inverted
+    // Ensure deltas are within valid ranges
+    const panPulseDeltaClamped = Math.max(Math.min(panPulseDelta, MAX_PAN_PULSE_STEP), -MAX_PAN_PULSE_STEP);
+    const tiltPulseDeltaClamped = Math.max(Math.min(tiltPulseDelta, MAX_TILT_PULSE_STEP), -MAX_TILT_PULSE_STEP);
   
-    // Map desired angles to servo pulses
-    const panPulseDesired =
-      PAN_MAX_LEFT_PULSE +
-      ((desiredPanAngle - PAN_MIN_ANGLE) * (PAN_MAX_RIGHT_PULSE - PAN_MAX_LEFT_PULSE)) /
-        (PAN_MAX_ANGLE - PAN_MIN_ANGLE);
+    // Debugging statements
+    console.log('deltaX:', deltaX);
+    console.log('deltaY:', deltaY);
+    console.log('normalizedDeltaX:', normalizedDeltaX);
+    console.log('normalizedDeltaY:', normalizedDeltaY);
+    console.log('panPulseDelta:', panPulseDeltaClamped);
+    console.log('tiltPulseDelta:', tiltPulseDeltaClamped);
   
-    const tiltPulseDesired =
-      TILT_MAX_UP_PULSE +
-      ((desiredTiltAngle - TILT_MIN_ANGLE) * (TILT_MAX_DOWN_PULSE - TILT_MAX_UP_PULSE)) /
-        (TILT_MAX_ANGLE - TILT_MIN_ANGLE);
-  
-    // Compute the difference from current pulses
-    let panPulseDelta = panPulseDesired - currentPanPulse;
-    let tiltPulseDelta = tiltPulseDesired - currentTiltPulse;
-  
-    // Limit the maximum step size for smoother movement
-    const MAX_PAN_PULSE_STEP = 10; // Adjust this value as needed
-    const MAX_TILT_PULSE_STEP = 10; // Adjust this value as needed
-  
-    // Clamp the deltas to the maximum step size
-    panPulseDelta = Math.max(Math.min(panPulseDelta, MAX_PAN_PULSE_STEP), -MAX_PAN_PULSE_STEP);
-    tiltPulseDelta = Math.max(Math.min(tiltPulseDelta, MAX_TILT_PULSE_STEP), -MAX_TILT_PULSE_STEP);
-    console.log('DDAAA PAN', panPulseDelta)
-    console.log('DDAAA TILT', tiltPulseDelta)
-
-    return { panPulseDelta, tiltPulseDelta };
+    return { panPulseDelta: panPulseDeltaClamped, tiltPulseDelta: tiltPulseDeltaClamped };
   };
-    
+      
   const handleSprayWater = () => {
     const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairPosition.x, crosshairPosition.y);
   
