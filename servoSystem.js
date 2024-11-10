@@ -269,9 +269,9 @@ class ServoSystem {
         console.log('panPulseRelpanPulseRel', panPulseRel, 'this.currentPosition.pan', this.currentPosition.pan)
         // Add relative movement to queue
         this.queues.pan.push({ 
-          pulse: this.currentPosition.pan + panPulseRel,
+          pulse: this.currentPosition.pan + 10,
           isRelative: true,
-          relativeDelta: panPulseRel
+          relativeDelta: 10
         });
       }
     }
@@ -281,9 +281,9 @@ class ServoSystem {
         console.log('tiltPulseReltiltPulseRel', tiltPulseRel, 'this.currentPosition.pan', this.currentPosition.pan)
         // Add relative movement to queue
         this.queues.tilt.push({ 
-          pulse: this.currentPosition.tilt + tiltPulseRel,
+          pulse: this.currentPosition.tilt + 10,
           isRelative: true,
-          relativeDelta: tiltPulseRel
+          relativeDelta: 10
         });
       }
     }
