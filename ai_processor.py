@@ -2,6 +2,10 @@ import cv2
 import numpy as np
 import tflite_runtime.interpreter as tflite
 import socketio
+import logging
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Initialize Socket.IO client
 sio = socketio.Client()
@@ -11,7 +15,10 @@ interpreter = tflite.Interpreter(model_path='/home/johannes/tflite_models/detect
 interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
-print("Model loaded successfully")
+logger.info("Model loaded successfully")
+logger.debug(f"Model input details: {interpreter.get_input_details()}")
+logger.debug(f"Model output details: {interpreter.get_output_details()}")
+
 
 @sio.event
 def connect():
@@ -31,6 +38,7 @@ def on_video_frame(data):
     # Convert the received frame data to a NumPy array
     nparr = np.frombuffer(data, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    logger.debug("Attempting to capture a frame...")
 
     if frame is None:
         print("Error: Received empty frame")
@@ -55,18 +63,23 @@ def on_video_frame(data):
     # Process detections
     detections = []
     for i in range(len(scores)):
-        if scores[i] > 0.1 and classes[i] == 0:
-            ymin, xmin, ymax, xmax = boxes[i]
+        score = scores[i]
+        if score > 0.5:  # Modify threshold as needed
+            klass = classes[i]
+            box = output_data[i]
             detections.append({
-                'class': 'person',
-                'score': float(scores[i]),
-                'box': [float(ymin), float(xmin), float(ymax), float(xmax)],
+                "class": klass,
+                "score": float(score),
+                "box": [float(b) for b in box]
             })
+            logger.info(f"Detection: class={klass}, score={score}, box={box}")
 
-    # Emit detections to the Node.js server
+    # Emit detections if there are any
     if detections:
-        print("Emitting detections:", detections)
         sio.emit('aiDetections', detections)
+        logger.info(f"Emitting detections: {detections}")
+    else:
+        logger.info("No detections above threshold")
 
 def main():
     try:
