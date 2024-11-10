@@ -1,88 +1,83 @@
-import logging
-import socketio
-import tflite_runtime.interpreter as tflite
-import numpy as np
 import cv2
+import numpy as np
+import tflite_runtime.interpreter as tflite
+import socketio
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# Set up connection to Node.js server
+# Initialize Socket.IO client
 sio = socketio.Client()
+
+# Load the TFLite model globally
+interpreter = tflite.Interpreter(model_path='/home/johannes/tflite_models/detect.tflite')
+interpreter.allocate_tensors()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+print("Model loaded successfully")
 
 @sio.event
 def connect():
-    logger.info("Connected to Node.js server")
+    print('Connected to Node.js server')
 
 @sio.event
 def disconnect():
-    logger.info("Disconnected from Node.js server")
+    print('Disconnected from Node.js server')
 
-# Load the model
-interpreter = tflite.Interpreter(model_path="/home/johannes/tflite_models/detect.tflite")
-interpreter.allocate_tensors()
-logger.info("Model loaded successfully")
-logger.debug(f"Model input details: {interpreter.get_input_details()}")
-logger.debug(f"Model output details: {interpreter.get_output_details()}")
+@sio.event
+def connect_error(data):
+    print("Connection failed:", data)
 
-# Frame capture and processing
-def capture_frame():
-    logger.debug("Attempting to capture a frame...")
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    cap.release()
-    
-    if not ret:
-        logger.error("Failed to capture frame")
-        return None
+# Event handler for receiving video frames
+@sio.on('videoFrame')
+def on_video_frame(data):
+    # Convert the received frame data to a NumPy array
+    nparr = np.frombuffer(data, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    logger.info("Frame captured successfully")
-    return frame
+    if frame is None:
+        print("Error: Received empty frame")
+        return
 
-# Inference and detection
-def process_frame(frame):
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
+    # Preprocess frame
+    img_resized = cv2.resize(frame, (input_details[0]['shape'][2], input_details[0]['shape'][1]))
+    img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+    img_expanded = np.expand_dims(img_rgb, axis=0)
 
-    # Preprocess the image
-    logger.debug("Converting frame to tensor and resizing...")
-    input_tensor = cv2.resize(frame, (300, 300))
-    input_tensor = np.expand_dims(input_tensor, axis=0)
+    # Set input tensor
+    interpreter.set_tensor(input_details[0]['index'], img_expanded)
 
-    interpreter.set_tensor(input_details[0]['index'], input_tensor)
+    # Run inference
     interpreter.invoke()
 
-    # Collect detections
+    # Get detection results
     boxes = interpreter.get_tensor(output_details[0]['index'])[0]
-    scores = interpreter.get_tensor(output_details[1]['index'])[0]
-    classes = interpreter.get_tensor(output_details[2]['index'])[0]
+    classes = interpreter.get_tensor(output_details[1]['index'])[0]
+    scores = interpreter.get_tensor(output_details[2]['index'])[0]
 
-    logger.debug(f"Raw detection boxes: {boxes}")
-    logger.debug(f"Raw detection scores: {scores}")
-    logger.debug(f"Raw detection classes: {classes}")
-
+    # Process detections
     detections = []
     for i in range(len(scores)):
-        score = scores[i]
-        if score > 0.5:  # Adjust threshold as necessary
-            klass = int(classes[i])
-            box = boxes[i]
-            detections.append({"class": klass, "score": float(score), "box": [float(b) for b in box]})
-            logger.info(f"Detection: class={klass}, score={score}, box={box}")
+        if scores[i] > 0.5 and classes[i] == 0:  # Assuming class 0 is 'person'
+            ymin, xmin, ymax, xmax = boxes[i]
+            detections.append({
+                'class': 'person',
+                'score': float(scores[i]),
+                'box': [float(ymin), float(xmin), float(ymax), float(xmax)],
+            })
 
+    # Emit detections to the Node.js server
     if detections:
-        sio.emit("aiDetections", detections)
-        logger.info(f"Emitting detections: {detections}")
-    else:
-        logger.info("No detections above threshold")
+        print("Emitting detections:", detections)
+        sio.emit('aiDetections', detections)
 
-# Run the loop
+def main():
+    try:
+        # Connect to the Node.js server (use /ai namespace)
+        sio.connect('http://localhost:3000/ai')
+        sio.wait()  # Keep the script running to listen for events
+
+    except Exception as e:
+        print("An error occurred:", e)
+    finally:
+        sio.disconnect()
+
 if __name__ == '__main__':
-    sio.connect('http://localhost:3000')
-    while True:
-        frame = capture_frame()
-        if frame is not None:
-            process_frame(frame)
-        else:
-            logger.error("No frame to process")
+    main()

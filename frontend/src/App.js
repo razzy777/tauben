@@ -387,22 +387,19 @@ function App() {
   useEffect(() => {
     const newSocket = io('http://192.168.68.68:3000/frontend'); // Connect to /frontend namespace
     setSocket(newSocket);
-
+  
     newSocket.on('connect', () => {
       console.log('Socket connected');
     });
-
+  
     newSocket.on('videoFrame', (frameData) => {
-      console.log('Received frame, length:', frameData.length);
       setVideoFrame(frameData);
     });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
-
+  
     newSocket.on('detections', (data) => {
+      console.log('Detections received:', data);
       setDetections(data);
+  
       if (data.length > 0) {
         const personDetection = data.find(d => d.class === 'person');
         if (personDetection) {
@@ -410,13 +407,16 @@ function App() {
         }
       }
     });
-
+  
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
+  
     return () => {
-      console.log('Cleaning up socket connection');
       newSocket.close();
     };
   }, []);
-  // Movement handlers remain the same
+    // Movement handlers remain the same
   const moveServoRelative = useCallback((pan, tilt) => {
     if (socket) {
       socket.emit('moveServoRelative', { pan, tilt });

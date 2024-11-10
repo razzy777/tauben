@@ -1,14 +1,13 @@
 const http = require('http');
 const socketIo = require('socket.io');
-const servoSystem = require('./servoSystem');
-const { captureImage, removeImage, startVideoStream, stopVideoStream } = require('./camera');
-const { ServoController } = require('./relay');
 const fs = require('fs');
+const { startVideoStream, stopVideoStream } = require('./camera');
+const servoSystem = require('./servoSystem');
+const { ServoController } = require('./relay');
 
 // Create the relay controller
-const relayController = new ServoController(588); // Replace with appropriate pin number
+const relayController = new ServoController(588); // Replace with the appropriate pin number
 
-// Create server
 const server = http.createServer();
 
 // Create a single Socket.IO server
@@ -23,11 +22,14 @@ const io = socketIo(server, {
 const frontendNamespace = io.of('/frontend');
 const aiNamespace = io.of('/ai');
 
+// Flag to prevent multiple video streams
+let videoStreamStarted = false;
+
 // Initialize system components
 async function initializeSystem() {
   try {
     console.log('Initializing system components...');
-    
+
     // Initialize servo system
     await servoSystem.initialize();
     console.log('Servo system initialized');
@@ -35,7 +37,7 @@ async function initializeSystem() {
     // Initialize relay controller
     await relayController.init();
     console.log('Relay controller initialized');
-    
+
     // Start the server
     server.listen(3000, () => {
       console.log('Socket server running on port 3000');
@@ -79,7 +81,7 @@ function mapBoundingBoxToServoPulse(centerX, centerY) {
 // Perform initial servo movement test
 async function performInitialServoTest() {
   console.log('Performing initial servo test...');
-  
+
   // Center the servos
   servoSystem.centerServos();
   await new Promise(resolve => setTimeout(resolve, 2000));
@@ -131,7 +133,12 @@ async function performScan() {
 // Socket connection handler for frontend clients
 frontendNamespace.on('connection', (socket) => {
   console.log('Frontend client connected:', socket.id);
-  startVideoStream(socket);
+
+  // Start video stream if not already started
+  if (!videoStreamStarted) {
+    startVideoStream(frontendNamespace, aiNamespace);
+    videoStreamStarted = true;
+  }
 
   // Handle photo capture requests
   socket.on('takePhoto', async () => {
@@ -140,13 +147,13 @@ frontendNamespace.on('connection', (socket) => {
       const imagePath = await captureImage();
       const imageData = fs.readFileSync(imagePath);
       const base64Image = imageData.toString('base64');
-      
+
       socket.emit('detection', {
         detected: true,
         timestamp: Date.now(),
         image: base64Image,
       });
-      
+
       console.log('Photo taken and sent to frontend');
       await removeImage(imagePath);
     } catch (error) {
@@ -218,8 +225,13 @@ frontendNamespace.on('connection', (socket) => {
 
   // Handle client disconnect
   socket.on('disconnect', () => {
-    stopVideoStream(); // Stop video stream when client disconnects
     console.log('Frontend client disconnected:', socket.id);
+
+    // Optionally stop the video stream if no clients are connected
+    if (frontendNamespace.sockets.size === 0) {
+      stopVideoStream();
+      videoStreamStarted = false;
+    }
   });
 });
 
@@ -256,7 +268,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // Graceful shutdown handler
 async function handleShutdown() {
   console.log('\nShutting down...');
-  
+
   try {
     // Cleanup servo system
     await servoSystem.cleanup();
