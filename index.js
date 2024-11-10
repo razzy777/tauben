@@ -10,12 +10,18 @@ const relayController = new ServoController(588); // Replace with appropriate pi
 
 // Create server
 const server = http.createServer();
+
+// Create a single Socket.IO server
 const io = socketIo(server, {
   cors: {
     origin: "*", // Replace with your frontend domain in production
     methods: ["GET", "POST"]
   }
 });
+
+// Create namespaces
+const frontendNamespace = io.of('/frontend');
+const aiNamespace = io.of('/ai');
 
 // Initialize system components
 async function initializeSystem() {
@@ -123,8 +129,8 @@ async function performScan() {
 }
 
 // Socket connection handler for frontend clients
-function handleSocketConnection(socket) {
-  console.log('New frontend client connected:', socket.id);
+frontendNamespace.on('connection', (socket) => {
+  console.log('Frontend client connected:', socket.id);
   startVideoStream(socket);
 
   // Handle photo capture requests
@@ -215,20 +221,15 @@ function handleSocketConnection(socket) {
     stopVideoStream(); // Stop video stream when client disconnects
     console.log('Frontend client disconnected:', socket.id);
   });
-}
+});
 
-// Set up socket connection handling for frontend clients
-io.on('connection', handleSocketConnection);
-
-// Set up Socket.IO server to communicate with the Python AI processor
-const aiServer = socketIo(server);
-
-aiServer.on('connection', (socket) => {
+// Socket connection handler for AI processor
+aiNamespace.on('connection', (socket) => {
   console.log('Python AI processor connected:', socket.id);
 
   socket.on('aiDetections', (detections) => {
     // Broadcast detections to connected frontend clients
-    io.emit('detections', detections);
+    frontendNamespace.emit('detections', detections);
 
     // Implement logic to move servos based on detections
     if (detections && detections.length > 0) {
