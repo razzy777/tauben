@@ -363,6 +363,21 @@ function App() {
     // Calculate center of bounding box
     const centerX = (xmin + xmax) / 2;
     const centerY = (ymin + ymax) / 2;
+
+
+    // These are the values of the bounding box (example):
+  /*  0
+: 
+0.5552987456321716
+1
+: 
+0.5001413822174072
+2
+: 
+0.9882187247276306
+3
+: 
+0.9837093*/
   
     // Map centerX and centerY to percentages
     const crosshairX = centerX * 100;
@@ -373,6 +388,9 @@ function App() {
   
     // Map crosshair position to servo pulses
     console.log('boundingBoxboundingBox', boundingBox)
+    console.log('crosshairX', crosshairX)
+    console.log('crosshairY', crosshairY)
+
     const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
     console.log('panPulse, ', panPulse, 'TILt' , tiltPulse)
 
