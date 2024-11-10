@@ -263,28 +263,29 @@ class ServoSystem {
   }
 
   moveToPositionRelative(panPulseRel, tiltPulseRel) {
-    console.log('panPulseRel, tiltPulseRel',panPulseRel, tiltPulseRel )
-    if (panPulseRel) {
+    console.log('panPulseRel, tiltPulseRel', panPulseRel, tiltPulseRel );
+
+    if (panPulseRel !== null && panPulseRel !== undefined && !isNaN(panPulseRel)) {
       if (this.queues.pan.length < this.MAX_QUEUE_SIZE) {
-        console.log('panPulseRelpanPulseRel', panPulseRel, 'this.currentPosition.pan', this.currentPosition.pan)
         // Add relative movement to queue
         this.queues.pan.push({ 
-          pulse: this.currentPosition.pan + 10,
+          pulse: this.currentPosition.pan + panPulseRel,
           isRelative: true,
-          relativeDelta: 10
+          relativeDelta: panPulseRel
         });
+        console.log(`Queued pan movement: current=${this.currentPosition.pan}, delta=${panPulseRel}`);
       }
     }
 
-    if (tiltPulseRel) {
+    if (tiltPulseRel !== null && tiltPulseRel !== undefined && !isNaN(tiltPulseRel)) {
       if (this.queues.tilt.length < this.MAX_QUEUE_SIZE) {
-        console.log('tiltPulseReltiltPulseRel', tiltPulseRel, 'this.currentPosition.pan', this.currentPosition.pan)
         // Add relative movement to queue
         this.queues.tilt.push({ 
-          pulse: this.currentPosition.tilt + 10,
+          pulse: this.currentPosition.tilt + tiltPulseRel,
           isRelative: true,
-          relativeDelta: 10
+          relativeDelta: tiltPulseRel
         });
+        console.log(`Queued tilt movement: current=${this.currentPosition.tilt}, delta=${tiltPulseRel}`);
       }
     }
   }
