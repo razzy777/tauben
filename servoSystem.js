@@ -266,7 +266,7 @@ class ServoSystem {
     console.log('panPulseRel, tiltPulseRel',panPulseRel, tiltPulseRel )
     if (panPulseRel) {
       if (this.queues.pan.length < this.MAX_QUEUE_SIZE) {
-        console.log('panPulseRelpanPulseRel', panPulseRel)
+        console.log('panPulseRelpanPulseRel', panPulseRel, 'this.currentPosition.pan', this.currentPosition.pan)
         // Add relative movement to queue
         this.queues.pan.push({ 
           pulse: this.currentPosition.pan + panPulseRel,
@@ -278,7 +278,7 @@ class ServoSystem {
 
     if (tiltPulseRel) {
       if (this.queues.tilt.length < this.MAX_QUEUE_SIZE) {
-        console.log('tiltPulseReltiltPulseRel', tiltPulseRel)
+        console.log('tiltPulseReltiltPulseRel', tiltPulseRel, 'this.currentPosition.pan', this.currentPosition.pan)
         // Add relative movement to queue
         this.queues.tilt.push({ 
           pulse: this.currentPosition.tilt + tiltPulseRel,
