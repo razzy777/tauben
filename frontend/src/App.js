@@ -235,6 +235,13 @@ const Crosshair = styled.div`
 `;
 
 
+const BoundingBox = styled.div`
+  position: absolute;
+  border: 2px solid red;
+  background-color: rgba(255, 0, 0, 0.3);
+`;
+
+
 
 
 function App() {
@@ -493,19 +500,29 @@ function App() {
                   alt="Live Feed"
                   onError={(e) => console.error('Image failed to load:', e)}
                 />
-                <Crosshair 
-                  x={crosshairPosition.x} 
-                  y={crosshairPosition.y}
-                >
-                  <div className="circle-outer" />
-                  <div className="circle-inner" />
-                </Crosshair>
+                {detections.map((detection, index) => {
+                  const { box, class: className, score } = detection;
+                  const [ymin, xmin, ymax, xmax] = box;
+
+                  return (
+                    <BoundingBox
+                      key={index}
+                      style={{
+                        top: `${ymin * 100}%`,
+                        left: `${xmin * 100}%`,
+                        width: `${(xmax - xmin) * 100}%`,
+                        height: `${(ymax - ymin) * 100}%`
+                      }}
+                    />
+                  );
+                })}
               </VideoOverlayContainer>
             ) : (
-                <NoImage>Waiting for video feed...</NoImage>
+              <NoImage>Waiting for video feed...</NoImage>
             )}
-        </LiveFeedContainer>
-      </ControlCard>
+          </LiveFeedContainer>
+        </ControlCard>
+
 
         {/* Controls section */}
         <ControlsWrapper>
