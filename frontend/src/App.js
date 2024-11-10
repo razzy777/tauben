@@ -309,6 +309,9 @@ function App() {
 
   const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY, currentPanPulse, currentTiltPulse) => {
     // Constants
+    console.log('INPUT CROSSX', crosshairX)
+    console.log('INPUT crosshairY', crosshairY)
+
     const PAN_MIN_ANGLE = -90;
     const PAN_MAX_ANGLE = 90;
     const TILT_MIN_ANGLE = -70; // Adjust based on total tilt range
