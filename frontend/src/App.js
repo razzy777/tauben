@@ -372,7 +372,10 @@ function App() {
     setCrosshairPosition({ x: crosshairX, y: crosshairY });
   
     // Map crosshair position to servo pulses
+    console.log('boundingBoxboundingBox', boundingBox)
     const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
+    console.log('panPulse, ', panPulse, 'TILt' , tiltPulse)
+
   
     // Move servos to follow the person
     if (socket) {

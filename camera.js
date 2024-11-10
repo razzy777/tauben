@@ -17,7 +17,7 @@ function startVideoStream(frontendNamespace, aiNamespace) {
     '--codec', 'mjpeg',
     '--width', '640',
     '--height', '480',
-    '--framerate', '30',
+    '--framerate', '15',
     '--inline',
     '--nopreview',
     '--timeout', '0',
