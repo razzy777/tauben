@@ -247,6 +247,7 @@ function App() {
   const [crosshairPosition, setCrosshairPosition] = useState({ x: 50, y: 50 }); // Start in center
   const [detections, setDetections] = useState([]);
   const crosshairStep = 1; // Amount to move crosshair per keypress
+  
 
 
 

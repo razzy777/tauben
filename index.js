@@ -2,64 +2,8 @@ const http = require('http');
 const socketIo = require('socket.io');
 const servoSystem = require('./servoSystem');
 const { captureImage, removeImage, startVideoStream, stopVideoStream } = require('./camera');
-
-const { io: ioClient } = require('socket.io-client');
-
-// Connect to the Python AI processor
-const aiSocket = ioClient('http://localhost:3000');  // Adjust the URL if necessary
-
-aiSocket.on('connect', () => {
-  console.log('Connected to AI processor');
-});
-
-aiSocket.on('aiDetections', (detections) => {
-  // Broadcast detections to connected clients
-  io.emit('detections', detections);
-
-  // Implement logic to move servos based on detections
-  if (detections && detections.length > 0) {
-    const personDetection = detections[0];  // Using the first detected person
-    adjustServosToFollow(personDetection.box);
-  }
-});
-
-aiSocket.on('disconnect', () => {
-  console.log('Disconnected from AI processor');
-});
-
-function adjustServosToFollow(boundingBox) {
-  const [ymin, xmin, ymax, xmax] = boundingBox;
-  const centerX = (xmin + xmax) / 2;
-  const centerY = (ymin + ymax) / 2;
-
-  // Map centerX and centerY to servo positions
-  const { panPulse, tiltPulse } = mapBoundingBoxToServoPulse(centerX, centerY);
-
-  // Move servos
-  servoSystem.moveToPosition(panPulse, tiltPulse);
-}
-
-function mapBoundingBoxToServoPulse(centerX, centerY) {
-    // Map normalized coordinates (0 to 1) to servo pulse ranges
-    const PAN_MAX_LEFT_PULSE = 2000;
-    const PAN_MAX_RIGHT_PULSE = 1200;
-    const TILT_MAX_UP_PULSE = 2400;
-    const TILT_MAX_DOWN_PULSE = 1350;
-  
-    const panPulseRange = PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE;
-    const tiltPulseRange = TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE;
-  
-    const panPulse = PAN_MAX_RIGHT_PULSE + centerX * panPulseRange;
-    const tiltPulse = TILT_MAX_DOWN_PULSE + centerY * tiltPulseRange;
-  
-    return { panPulse, tiltPulse };
-  }
-  
-
-
 const { ServoController } = require('./relay');
 const fs = require('fs');
-
 
 // Create the relay controller
 const relayController = new ServoController(588); // Replace with appropriate pin number
@@ -73,39 +17,59 @@ const io = socketIo(server, {
   }
 });
 
+// Initialize system components
 async function initializeSystem() {
-    try {
-      console.log('Initializing system components...');
-      
-      // Check camera availability
-      const cameraAvailable = false
-      if (!cameraAvailable) {
-        console.error('No camera available!');
-        // You can choose to continue without camera or exit
-        // process.exit(1);
-      } else {
-        console.log('Camera detected and available');
-      }
-  
-      // Initialize servo system
-      await servoSystem.initialize();
-      console.log('Servo system initialized');
-  
-      // Initialize relay controller
-      await relayController.init();
-      console.log('Relay controller initialized');
-      
-      // Start the server
-      server.listen(3000, () => {
-        console.log('Socket server running on port 3000');
-        console.log('System initialization complete, ready for commands');
-      });
-    } catch (error) {
-      console.error('System initialization failed:', error);
-      process.exit(1);
-    }
+  try {
+    console.log('Initializing system components...');
+    
+    // Initialize servo system
+    await servoSystem.initialize();
+    console.log('Servo system initialized');
+
+    // Initialize relay controller
+    await relayController.init();
+    console.log('Relay controller initialized');
+    
+    // Start the server
+    server.listen(3000, () => {
+      console.log('Socket server running on port 3000');
+      console.log('System initialization complete, ready for commands');
+    });
+  } catch (error) {
+    console.error('System initialization failed:', error);
+    process.exit(1);
   }
-  
+}
+
+// Adjust servos to follow detected person
+function adjustServosToFollow(boundingBox) {
+  const [ymin, xmin, ymax, xmax] = boundingBox;
+  const centerX = (xmin + xmax) / 2;
+  const centerY = (ymin + ymax) / 2;
+
+  // Map centerX and centerY to servo positions
+  const { panPulse, tiltPulse } = mapBoundingBoxToServoPulse(centerX, centerY);
+
+  // Move servos
+  servoSystem.moveToPosition(panPulse, tiltPulse);
+}
+
+function mapBoundingBoxToServoPulse(centerX, centerY) {
+  // Map normalized coordinates (0 to 1) to servo pulse ranges
+  const PAN_MAX_LEFT_PULSE = 2000;
+  const PAN_MAX_RIGHT_PULSE = 1200;
+  const TILT_MAX_UP_PULSE = 2400;
+  const TILT_MAX_DOWN_PULSE = 1350;
+
+  const panPulseRange = PAN_MAX_LEFT_PULSE - PAN_MAX_RIGHT_PULSE;
+  const tiltPulseRange = TILT_MAX_UP_PULSE - TILT_MAX_DOWN_PULSE;
+
+  const panPulse = PAN_MAX_RIGHT_PULSE + centerX * panPulseRange;
+  const tiltPulse = TILT_MAX_DOWN_PULSE + centerY * tiltPulseRange;
+
+  return { panPulse, tiltPulse };
+}
+
 // Perform initial servo movement test
 async function performInitialServoTest() {
   console.log('Performing initial servo test...');
@@ -134,36 +98,34 @@ async function performInitialServoTest() {
 }
 
 async function performScan() {
-    // Define scanning parameters
-    const panStart = servoSystem.PAN_MAX_RIGHT_PULSE;
-    const panEnd = servoSystem.PAN_MAX_LEFT_PULSE;
-    const tiltStart = servoSystem.TILT_MAX_DOWN_PULSE;
-    const tiltEnd = servoSystem.TILT_MAX_UP_PULSE;
-  
-    const panSteps = 5;
-    const tiltSteps = 3;
-    const delayBetweenMoves = 1000; // milliseconds
-  
-    const panStepSize = (panEnd - panStart) / panSteps;
-    const tiltStepSize = (tiltEnd - tiltStart) / tiltSteps;
-  
-    for (let tiltPulse = tiltStart; tiltPulse <= tiltEnd; tiltPulse += tiltStepSize) {
-      for (let panPulse = panStart; panPulse <= panEnd; panPulse += panStepSize) {
-        await servoSystem.moveToPositionAndWait(panPulse, tiltPulse);
-        await new Promise(resolve => setTimeout(resolve, delayBetweenMoves));
-      }
+  // Define scanning parameters
+  const panStart = servoSystem.PAN_MAX_RIGHT_PULSE;
+  const panEnd = servoSystem.PAN_MAX_LEFT_PULSE;
+  const tiltStart = servoSystem.TILT_MAX_DOWN_PULSE;
+  const tiltEnd = servoSystem.TILT_MAX_UP_PULSE;
+
+  const panSteps = 5;
+  const tiltSteps = 3;
+  const delayBetweenMoves = 1000; // milliseconds
+
+  const panStepSize = (panEnd - panStart) / panSteps;
+  const tiltStepSize = (tiltEnd - tiltStart) / tiltSteps;
+
+  for (let tiltPulse = tiltStart; tiltPulse <= tiltEnd; tiltPulse += tiltStepSize) {
+    for (let panPulse = panStart; panPulse <= panEnd; panPulse += panStepSize) {
+      await servoSystem.moveToPositionAndWait(panPulse, tiltPulse);
+      await new Promise(resolve => setTimeout(resolve, delayBetweenMoves));
     }
-  
-    // Return to center position
-    await servoSystem.moveToPositionAndWait(servoSystem.PAN_CENTER_PULSE, servoSystem.TILT_CENTER_PULSE);
   }
-  
 
-// Socket connection handler
+  // Return to center position
+  await servoSystem.moveToPositionAndWait(servoSystem.PAN_CENTER_PULSE, servoSystem.TILT_CENTER_PULSE);
+}
+
+// Socket connection handler for frontend clients
 function handleSocketConnection(socket) {
-  console.log('New client connected:', socket.id);
+  console.log('New frontend client connected:', socket.id);
   startVideoStream(socket);
-
 
   // Handle photo capture requests
   socket.on('takePhoto', async () => {
@@ -198,14 +160,6 @@ function handleSocketConnection(socket) {
       socket.emit('error', { message: 'Failed to move servo' });
     }
   });
-  socket.on('moveServoAbsolute', ({ panPulse, tiltPulse }) => {
-    try {
-      servoSystem.moveToPosition(panPulse, tiltPulse);
-    } catch (error) {
-      console.error('Error moving servos to absolute position:', error);
-    }
-  });
-  
 
   // Handle relative servo movement
   socket.on('moveServoRelative', ({ pan, tilt }) => {
@@ -243,49 +197,8 @@ function handleSocketConnection(socket) {
       socket.emit('error', { message: 'Failed to activate water' });
     }
   });
-  // Add this to your socket connection handler
-    socket.on('getServoStatus', () => {
-        try {
-        const status = servoSystem.getQueueStatus();
-        socket.emit('servoStatus', status);
-        } catch (error) {
-        console.error('Error getting servo status:', error);
-        socket.emit('error', { message: 'Failed to get servo status' });
-        }
-    });
-  
-  // Update your move handlers to include status updates
-  socket.on('moveServoRelative', ({ pan, tilt }) => {
-    try {
-      console.log(`Moving servo relatively: pan=${pan}, tilt=${tilt}`);
-      servoSystem.moveToPositionRelative(pan, tilt);
-      
-      // Send immediate status update
-      const status = servoSystem.getQueueStatus();
-      socket.emit('servoStatus', status);
-      
-    } catch (error) {
-      console.error('Error moving servo relatively:', error);
-      socket.emit('error', { message: 'Failed to move servo' });
-    }
-  });
 
-  socket.on('moveToPositionAndSpray', async ({ panPulse, tiltPulse, duration }) => {
-    try {
-      console.log(`Moving servos to pan=${panPulse}, tilt=${tiltPulse}, then activating water for ${duration}ms`);
-      // Move servos
-      servoSystem.moveToPosition(panPulse, tiltPulse);
-      // Wait for servos to reach position
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Adjust delay as needed
-      // Activate water
-      await relayController.activateWater(duration);
-      socket.emit('waterActivated', { success: true });
-    } catch (error) {
-      console.error('Error moving servos and activating water:', error);
-      socket.emit('error', { message: 'Failed to move servos and activate water' });
-    }
-  });
-
+  // Handle scan command
   socket.on('startScan', async () => {
     try {
       console.log('Starting scan...');
@@ -296,18 +209,38 @@ function handleSocketConnection(socket) {
       socket.emit('error', { message: 'Failed to perform scan' });
     }
   });
-  
-  
 
   // Handle client disconnect
   socket.on('disconnect', () => {
     stopVideoStream(); // Stop video stream when client disconnects
-    console.log('Client disconnected:', socket.id);
+    console.log('Frontend client disconnected:', socket.id);
   });
 }
 
-// Set up socket connection handling
+// Set up socket connection handling for frontend clients
 io.on('connection', handleSocketConnection);
+
+// Set up Socket.IO server to communicate with the Python AI processor
+const aiServer = socketIo(server);
+
+aiServer.on('connection', (socket) => {
+  console.log('Python AI processor connected:', socket.id);
+
+  socket.on('aiDetections', (detections) => {
+    // Broadcast detections to connected frontend clients
+    io.emit('detections', detections);
+
+    // Implement logic to move servos based on detections
+    if (detections && detections.length > 0) {
+      const personDetection = detections[0];  // Using the first detected person
+      adjustServosToFollow(personDetection.box);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Python AI processor disconnected:', socket.id);
+  });
+});
 
 // Error handling for uncaught exceptions
 process.on('uncaughtException', (error) => {

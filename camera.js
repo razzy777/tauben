@@ -1,81 +1,82 @@
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const ioClient = require('socket.io-client');
 
-// Existing folder and path definitions
-const folderPath = '/home/johannes/tauben/images';
-const imagePath = path.join(folderPath, 'test_picture.jpg');
+// Connect to Python AI processor
+const aiSocket = ioClient('http://localhost:5000'); // Use a different port for Python script
 
-// Ensure directory exists with permissions
-if (!fs.existsSync(folderPath)) {
-    console.log(`Creating directory at: ${folderPath}`);
-    fs.mkdirSync(folderPath, { recursive: true });
-    fs.chmodSync(folderPath, 0o777);
-} else {
-    console.log(`Directory exists at: ${folderPath}`);
-    fs.chmodSync(folderPath, 0o777);
-}
+// Handle connection events
+aiSocket.on('connect', () => {
+  console.log('Connected to AI processor');
+});
+
+aiSocket.on('disconnect', () => {
+  console.log('Disconnected from AI processor');
+});
 
 // Keep track of the video process
 let videoProcess = null;
 
 // Function to start video stream
 function startVideoStream(socket) {
-    if (videoProcess) {
-        console.log('Video stream already running');
-        return;
-    }
+  if (videoProcess) {
+    console.log('Video stream already running');
+    return;
+  }
 
-    console.log('Starting video stream...');
-    
-    const command = 'libcamera-vid';
-    const args = [
-        '--codec', 'mjpeg',
-        '--width', '1280',
-        '--height', '720',
-        '--framerate', '15',
-        '--inline',
-        '--nopreview',
-        '--timeout', '0',
-        '--output', '-'
-    ];
+  console.log('Starting video stream...');
+  
+  const command = 'libcamera-vid';
+  const args = [
+      '--codec', 'mjpeg',
+      '--width', '1280',
+      '--height', '720',
+      '--framerate', '15',
+      '--inline',
+      '--nopreview',
+      '--timeout', '0',
+      '--output', '-'
+  ];
 
-    try {
-        videoProcess = spawn(command, args);
-        let buffer = Buffer.from([]);
+  try {
+    videoProcess = spawn(command, args);
+    let buffer = Buffer.from([]);
 
-        videoProcess.stdout.on('data', (data) => {
-            buffer = Buffer.concat([buffer, data]);
-            
-            // Look for JPEG start and end markers
-            let start = 0;
-            let end = 0;
-            
-            while (true) {
-                start = buffer.indexOf(Buffer.from([0xFF, 0xD8]));
-                end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));
-                
-                if (start !== -1 && end !== -1 && end > start) {
-                    const frame = buffer.slice(start, end + 2);
-                    if (frame.length > 1000) {
-                        socket.emit('videoFrame', frame.toString('base64'));
-                        console.log('Frame sent, size:', frame.length); // Debug log
-                    }
-                    buffer = buffer.slice(end + 2);
-                } else {
-                    break;
-                }
-            }
-        });
+    videoProcess.stdout.on('data', (data) => {
+      buffer = Buffer.concat([buffer, data]);
+      
+      // Look for JPEG start and end markers
+      let start = 0;
+      let end = 0;
+      
+      while (true) {
+        start = buffer.indexOf(Buffer.from([0xFF, 0xD8]));
+        end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));
+        
+        if (start !== -1 && end !== -1 && end > start) {
+          const frame = buffer.slice(start, end + 2);
+          if (frame.length > 1000) {
+            // Emit video frame to frontend
+            socket.emit('videoFrame', frame.toString('base64'));
+            // Emit frame to Python AI processor
+            aiSocket.emit('videoFrame', frame);
+          }
+          buffer = buffer.slice(end + 2);
+        } else {
+          break;
+        }
+      }
+    });
 
-        videoProcess.on('error', (error) => {
-            console.error('Camera process error:', error);
-        });
+    videoProcess.on('error', (error) => {
+      console.error('Camera process error:', error);
+    });
 
-    } catch (error) {
-        console.error('Failed to start video stream:', error);
-        videoProcess = null;
-    }
+  } catch (error) {
+    console.error('Failed to start video stream:', error);
+    videoProcess = null;
+  }
 }
 
 // Function to stop video stream
@@ -125,8 +126,8 @@ async function removeImage() {
 }
 
 module.exports = {
-    captureImage,
-    removeImage,
-    startVideoStream,
-    stopVideoStream
+  captureImage,
+  removeImage,
+  startVideoStream,
+  stopVideoStream
 };
