@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import io from 'socket.io-client';
 import styled from 'styled-components';
+import debounce from 'lodash/debounce';
 
 // Styled Components
 const Container = styled.div`
@@ -11,14 +12,13 @@ const Container = styled.div`
 `;
 
 const Panel = styled.div`
-  max-width: 1600px; // Increased max-width
+  max-width: 1600px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 2rem;
 `;
 
-// Adjust LiveFeedContainer to have a 16:9 aspect ratio
 const LiveFeedContainer = styled.div`
   position: relative;
   width: 100%;
@@ -33,7 +33,6 @@ const LiveFeedContainer = styled.div`
   }
 `;
 
-// Ensure VideoOverlayContainer fills the parent
 const VideoOverlayContainer = styled.div`
   position: absolute;
   top: 0;
@@ -41,7 +40,6 @@ const VideoOverlayContainer = styled.div`
   width: 100%;
   height: 100%;
 `;
-
 
 const Video = styled.img`
   width: 100%;
@@ -161,79 +159,18 @@ const StatusItem = styled.div`
 `;
 
 const NoImage = styled.div`
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 0.5rem;
-    color: #94a3b8;
-`;
-
-
-const Crosshair = styled.div`
   position: absolute;
-  width: 40px;
-  height: 40px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 10;
-  left: ${props => props.x}%;
-  top: ${props => props.y}%;
-
-  /* Crosshair styles */
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    background-color: rgba(255, 0, 0, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.7);
-  }
-
-  &::before {
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 2px;
-    transform: translateY(-50%);
-  }
-
-  &::after {
-    left: 50%;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    transform: translateX(-50%);
-  }
-
-  .circle-outer {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 40px;
-    height: 40px;
-    border: 2px solid rgba(255, 0, 0, 0.7);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-  }
-
-  .circle-inner {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 10px;
-    height: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.7);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    background-color: rgba(255, 0, 0, 0.3);
-  }
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.5rem;
+  color: #94a3b8;
 `;
-
 
 const BoundingBox = styled.div`
   position: absolute;
@@ -241,162 +178,179 @@ const BoundingBox = styled.div`
   background-color: rgba(255, 0, 0, 0.3);
 `;
 
-
-
-
 function App() {
   const [detection, setDetection] = useState(null);
   const [socket, setSocket] = useState(null);
-  const [keyStates, setKeyStates] = useState({});
   const [keysPressed, setKeysPressed] = useState({});
+  const [buttonStates, setButtonStates] = useState({});
   const [systemStatus, setSystemStatus] = useState(null);
   const [videoFrame, setVideoFrame] = useState(null);
   const [crosshairPosition, setCrosshairPosition] = useState({ x: 50, y: 50 }); // Start in center
   const [detections, setDetections] = useState([]);
-  const crosshairStep = 1; // Amount to move crosshair per keypress
-  
-
-
 
   const MOVEMENT_AMOUNT = 5;
 
-  const moveCrosshair = useCallback((direction) => {
-    setCrosshairPosition(prev => {
-        const newPos = { ...prev };
-        switch (direction) {
-            case 'up':
-                newPos.y = Math.max(0, prev.y - crosshairStep);
-                break;
-            case 'down':
-                newPos.y = Math.min(100, prev.y + crosshairStep);
-                break;
-            case 'left':
-                newPos.x = Math.max(0, prev.x - crosshairStep);
-                break;
-            case 'right':
-                newPos.x = Math.min(100, prev.x + crosshairStep);
-                break;
-            default:
-                break;
-        }
-        return newPos;
-    });
-  }, [crosshairStep]);
+  const moveServoRelative = useCallback((pan, tilt) => {
+    if (socket) {
+      socket.emit('moveServoRelative', { pan, tilt });
+    }
+  }, [socket]);
 
+  const moveServoRelativeDebounced = useCallback(
+    debounce((pan, tilt) => {
+      if (socket) {
+        socket.emit('moveServoRelative', { pan, tilt });
+      }
+    }, 100), // Adjust the delay as needed
+    [socket]
+  );
+
+  // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
-        switch(e.key) {
-            case 'w':
-                moveCrosshair('up');
-                break;
-            case 's':
-                moveCrosshair('down');
-                break;
-            case 'a':
-                moveCrosshair('left');
-                break;
-            case 'd':
-                moveCrosshair('right');
-                break;
-            default:
-                break;
-        }
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault(); // Prevent default scrolling behavior
+        setKeysPressed((prevKeys) => ({
+          ...prevKeys,
+          [e.key]: true,
+        }));
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        setKeysPressed((prevKeys) => ({
+          ...prevKeys,
+          [e.key]: false,
+        }));
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [moveCrosshair]);
+    window.addEventListener('keyup', handleKeyUp);
 
-  const mapCrosshairPositionToServoPulse = (crosshairX, crosshairY) => {
-    // Constants for maximum step sizes (adjust as needed)
-    const MAX_PAN_PULSE_STEP = 10;
-    const MAX_TILT_PULSE_STEP = 10;
-  
-    // Compute the deviation from the center (range: -50 to +50)
-    const deltaX = crosshairX - 50; // Positive if crosshair is to the right
-    const deltaY = crosshairY - 50; // Positive if crosshair is below the center
-  
-    // Normalize the deviations to a range of -1 to +1
-    const normalizedDeltaX = deltaX / 50;
-    const normalizedDeltaY = deltaY / 50;
-  
-    // Calculate pulse deltas proportional to the normalized deviations
-    const panPulseDelta = normalizedDeltaX * MAX_PAN_PULSE_STEP;
-    const tiltPulseDelta = -normalizedDeltaY * MAX_TILT_PULSE_STEP; // Negative to adjust for coordinate system
-  
-    // Ensure deltas are within valid ranges
-    const panPulseDeltaClamped = Math.max(Math.min(panPulseDelta, MAX_PAN_PULSE_STEP), -MAX_PAN_PULSE_STEP);
-    const tiltPulseDeltaClamped = Math.max(Math.min(tiltPulseDelta, MAX_TILT_PULSE_STEP), -MAX_TILT_PULSE_STEP);
-  
-    // Debugging statements
-    console.log('deltaX:', deltaX);
-    console.log('deltaY:', deltaY);
-    console.log('normalizedDeltaX:', normalizedDeltaX);
-    console.log('normalizedDeltaY:', normalizedDeltaY);
-    console.log('panPulseDelta:', panPulseDeltaClamped);
-    console.log('tiltPulseDelta:', tiltPulseDeltaClamped);
-  
-    return { panPulseDelta: panPulseDeltaClamped, tiltPulseDelta: tiltPulseDeltaClamped };
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Throttle the servo movement when arrow keys are held down
+  useEffect(() => {
+    let lastMoveTime = 0;
+    const throttleDelay = 100; // milliseconds
+
+    const moveServos = (timestamp) => {
+      if (!lastMoveTime || timestamp - lastMoveTime >= throttleDelay) {
+        if (keysPressed['ArrowUp']) {
+          moveServoRelative(0, MOVEMENT_AMOUNT);
+        }
+        if (keysPressed['ArrowDown']) {
+          moveServoRelative(0, -MOVEMENT_AMOUNT);
+        }
+        if (keysPressed['ArrowLeft']) {
+          moveServoRelative(MOVEMENT_AMOUNT, 0);
+        }
+        if (keysPressed['ArrowRight']) {
+          moveServoRelative(-MOVEMENT_AMOUNT, 0);
+        }
+        lastMoveTime = timestamp;
+      }
+      animationFrameId = requestAnimationFrame(moveServos);
+    };
+
+    let animationFrameId = requestAnimationFrame(moveServos);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [keysPressed, moveServoRelative]);
+
+  const handleButtonPress = (direction) => {
+    // Update the button state to active
+    setButtonStates((prev) => ({ ...prev, [direction]: true }));
+
+    // Move the servo
+    switch (direction) {
+      case 'up':
+        moveServoRelative(0, MOVEMENT_AMOUNT);
+        break;
+      case 'down':
+        moveServoRelative(0, -MOVEMENT_AMOUNT);
+        break;
+      case 'left':
+        moveServoRelative(MOVEMENT_AMOUNT, 0);
+        break;
+      case 'right':
+        moveServoRelative(-MOVEMENT_AMOUNT, 0);
+        break;
+      default:
+        break;
+    }
+
+    // Reset the button state after a short delay
+    setTimeout(() => {
+      setButtonStates((prev) => ({ ...prev, [direction]: false }));
+    }, 100); // Adjust the delay as needed
   };
-      
+
   const handleSprayWater = () => {
-    const { panPulse, tiltPulse } = mapCrosshairPositionToServoPulse(crosshairPosition.x, crosshairPosition.y);
-  
     if (socket) {
-      socket.emit('moveToPositionAndSpray', { panPulse, tiltPulse, duration: 500 });
+      socket.emit('activateWater', 500); // Adjust duration as needed
     }
   };
 
-  const adjustServosToFollow = (boundingBox) => {
+  const handleVideoClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    setCrosshairPosition({ x, y });
+  };
+
+  const adjustServosToFollow = useCallback((boundingBox) => {
     // boundingBox format: [ymin, xmin, ymax, xmax] normalized between 0 and 1
     const [ymin, xmin, ymax, xmax] = boundingBox;
-  
+
     // Calculate center of bounding box
     const centerX = (xmin + xmax) / 2;
     const centerY = (ymin + ymax) / 2;
-  
+
     // Map centerX and centerY to percentages
     const crosshairX = centerX * 100;
     const crosshairY = centerY * 100;
-  
+
     // Update crosshair position (optional)
     setCrosshairPosition({ x: crosshairX, y: crosshairY });
-  
-    // Map crosshair position to servo pulse
-    console.log('centerX, ', centerX, 'centerY' , centerY)
 
-    console.log('crosshairX, ', crosshairX, 'TILt' , crosshairY)
+    // Map crosshair position to servo movement
+    const deltaX = crosshairX - 50; // Range -50 to +50
+    const deltaY = crosshairY - 50;
 
-    const { panPulseDelta, tiltPulseDelta } = mapCrosshairPositionToServoPulse(crosshairX, crosshairY);
+    const panMovement = -deltaX * 0.1; // Adjust scaling factor as needed
+    const tiltMovement = deltaY * 0.1;
 
+    moveServoRelativeDebounced(panMovement, tiltMovement);
+  }, [moveServoRelativeDebounced]);
 
-  
-    // Move servos to follow the person
-    if (socket) {
-      socket.emit('moveServoRelative', { pan: panPulseDelta, tilt: tiltPulseDelta });
-    }
-  };
-  
-
-
-
-  // Socket connection and event handlers remain the same
+  // Socket connection and event handlers
   useEffect(() => {
-    const newSocket = io('http://192.168.68.68:3000/frontend'); // Connect to /frontend namespace
+    const newSocket = io('http://192.168.68.68:3000/frontend'); // Adjust the URL if needed
     setSocket(newSocket);
-  
+
     newSocket.on('connect', () => {
       console.log('Socket connected');
     });
-  
+
     newSocket.on('videoFrame', (frameData) => {
       setVideoFrame(frameData);
     });
-  
+
     newSocket.on('detections', (data) => {
       console.log('Detections received:', data);
       setDetections(data);
-  
+
       if (data.length > 0) {
         const personDetection = data.find(d => d.class === 'person');
         if (personDetection) {
@@ -404,83 +358,15 @@ function App() {
         }
       }
     });
-  
+
     newSocket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
     });
-  
+
     return () => {
       newSocket.close();
     };
-  }, []);
-    // Movement handlers remain the same
-  const moveServoRelative = useCallback((pan, tilt) => {
-    if (socket) {
-      socket.emit('moveServoRelative', { pan, tilt });
-    }
-  }, [socket]);
-
-  const handleVideoClick = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-  
-    setCrosshairPosition({ x, y });
-  };
-  
-  const keyIntervals = useRef({});
-
-  // Keyboard controls remain the same
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      setKeysPressed((prevKeys) => ({
-        ...prevKeys,
-        [e.key]: true,
-      }));
-    };
-  
-    const handleKeyUp = (e) => {
-      setKeysPressed((prevKeys) => ({
-        ...prevKeys,
-        [e.key]: false,
-      }));
-    };
-  
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-  
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-  useEffect(() => {
-    let animationFrameId;
-  
-    const moveServos = () => {
-      if (keysPressed['ArrowUp']) {
-        moveServoRelative(0, MOVEMENT_AMOUNT);
-      }
-      if (keysPressed['ArrowDown']) {
-        moveServoRelative(0, -MOVEMENT_AMOUNT);
-      }
-      if (keysPressed['ArrowLeft']) {
-        moveServoRelative(MOVEMENT_AMOUNT, 0);
-      }
-      if (keysPressed['ArrowRight']) {
-        moveServoRelative(-MOVEMENT_AMOUNT, 0);
-      }
-      animationFrameId = requestAnimationFrame(moveServos);
-    };
-  
-    moveServos();
-  
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [keysPressed, moveServoRelative]);
-  
-    
+  }, [adjustServosToFollow]);
 
   return (
     <Container>
@@ -520,23 +406,22 @@ function App() {
           </LiveFeedContainer>
         </ControlCard>
 
-
         {/* Controls section */}
         <ControlsWrapper>
           <ControlCard>
             <ControlGrid>
               <div />
-              <DirectionButton 
-                onClick={() => moveServoRelative(0, MOVEMENT_AMOUNT)}
-                active={keyStates['ArrowUp']}
+              <DirectionButton
+                onMouseDown={() => handleButtonPress('up')}
+                active={buttonStates['up']}
               >
                 ▲
               </DirectionButton>
               <div />
-              
+
               <DirectionButton
-                onClick={() => moveServoRelative(MOVEMENT_AMOUNT, 0)}
-                active={keyStates['ArrowLeft']}
+                onMouseDown={() => handleButtonPress('left')}
+                active={buttonStates['left']}
               >
                 ◄
               </DirectionButton>
@@ -547,16 +432,16 @@ function App() {
                 ⟲
               </DirectionButton>
               <DirectionButton
-                onClick={() => moveServoRelative(-MOVEMENT_AMOUNT, 0)}
-                active={keyStates['ArrowRight']}
+                onMouseDown={() => handleButtonPress('right')}
+                active={buttonStates['right']}
               >
                 ►
               </DirectionButton>
-              
+
               <div />
               <DirectionButton
-                onClick={() => moveServoRelative(0, -MOVEMENT_AMOUNT)}
-                active={keyStates['ArrowDown']}
+                onMouseDown={() => handleButtonPress('down')}
+                active={buttonStates['down']}
               >
                 ▼
               </DirectionButton>
@@ -567,7 +452,7 @@ function App() {
               <ActionButton onClick={() => socket?.emit('takePhoto')}>
                 📸 Take Photo
               </ActionButton>
-              <ActionButton 
+              <ActionButton
                 onClick={handleSprayWater}
                 water
               >
@@ -576,7 +461,6 @@ function App() {
               <ActionButton onClick={() => socket?.emit('startScan')}>
                 🔍 Scan
               </ActionButton>
-
             </ActionButtonContainer>
 
             {systemStatus && (
@@ -600,7 +484,7 @@ function App() {
                 <img
                   src={`data:image/jpeg;base64,${detection.image}`}
                   alt="Capture"
-                  style={{ 
+                  style={{
                     width: '100%',
                     borderRadius: '0.5rem',
                     boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'

@@ -1,16 +1,17 @@
 import cv2
 import numpy as np
-import tflite_runtime.interpreter as tflite
+import hailo_platform
 import socketio
 
 # Initialize Socket.IO client
 sio = socketio.Client()
 
-# Load the TFLite model globally
-interpreter = tflite.Interpreter(model_path='/home/johannes/tflite_models/detect.tflite')
-interpreter.allocate_tensors()
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+# Load the Hailo model
+hef_path = '/home/johannes/hailo_models/yolov5_person.hef'  # Replace with the path to your HEF file
+print("Loading Hailo HEF model...")
+device = hailo_platform.Device()
+network_group = device.configure(hef_path)
+network_group_params = network_group.create_params()
 print("Model loaded successfully")
 
 # Event handler for connecting to the /ai namespace
@@ -31,7 +32,7 @@ def connect_error(data):
 # Event handler for receiving video frames
 @sio.on('videoFrame', namespace='/ai')
 def on_video_frame(data):
-    print("Received frame from Node.js")  # Add logging
+    print("Received frame from Node.js")
 
     # Convert the received frame data to a NumPy array
     nparr = np.frombuffer(data, np.uint8)
@@ -42,22 +43,20 @@ def on_video_frame(data):
         return
 
     # Preprocess frame
-    img_resized = cv2.resize(frame, (input_details[0]['shape'][2], input_details[0]['shape'][1]))
+    img_resized = cv2.resize(frame, (640, 640))  # Resize to model's input resolution
     img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
-    img_expanded = np.expand_dims(img_rgb, axis=0)
+    img_normalized = img_rgb / 255.0  # Normalize if required by the model
+    img_expanded = np.expand_dims(img_normalized, axis=0).astype(np.float32)
 
-    # Set input tensor
-    interpreter.set_tensor(input_details[0]['index'], img_expanded)
+    # Run inference using Hailo SDK
+    input_tensor = {'input': img_expanded}
+    output = network_group.infer(input_tensor)
 
-    # Run inference
-    interpreter.invoke()
+    # Process detections (assuming YOLO output format)
+    boxes = output['boxes']
+    classes = output['class_ids']
+    scores = output['scores']
 
-    # Get detection results
-    boxes = interpreter.get_tensor(output_details[0]['index'])[0]
-    classes = interpreter.get_tensor(output_details[1]['index'])[0]
-    scores = interpreter.get_tensor(output_details[2]['index'])[0]
-
-    # Process detections
     detections = []
     for i in range(len(scores)):
         if scores[i] > 0.5 and classes[i] == 0:  # Assuming class 0 is 'person'
