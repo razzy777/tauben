@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import io from 'socket.io-client';
 import styled from 'styled-components';
 import debounce from 'lodash/debounce';
@@ -178,52 +178,130 @@ const BoundingBox = styled.div`
   background-color: rgba(255, 0, 0, 0.3);
 `;
 
-function App() {
-  const [detection, setDetection] = useState(null);
-  const [socket, setSocket] = useState(null);
-  const [keysPressed, setKeysPressed] = useState({});
-  const [buttonStates, setButtonStates] = useState({});
-  const [systemStatus, setSystemStatus] = useState(null);
-  const [videoFrame, setVideoFrame] = useState(null);
-  const [crosshairPosition, setCrosshairPosition] = useState({ x: 50, y: 50 }); // Start in center
-  const [detections, setDetections] = useState([]);
+const ConnectionStatus = styled.div`
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background: ${props => props.connected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+  color: ${props => props.connected ? '#10b981' : '#ef4444'};
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+`;
 
+function App() {
+  const [videoFrame, setVideoFrame] = useState(null);
+  const [detections, setDetections] = useState([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [buttonStates, setButtonStates] = useState({});
+  const [keysPressed, setKeysPressed] = useState({});
+  const socketRef = useRef(null);
+  
   const MOVEMENT_AMOUNT = 5;
 
   const moveServoRelative = useCallback((pan, tilt) => {
-    if (socket) {
-      socket.emit('moveServoRelative', { pan, tilt });
+    if (socketRef.current) {
+      socketRef.current.emit('moveServoRelative', { pan, tilt });
     }
-  }, [socket]);
+  }, []);
 
   const moveServoRelativeDebounced = useCallback(
     debounce((pan, tilt) => {
-      if (socket) {
-        socket.emit('moveServoRelative', { pan, tilt });
+      if (socketRef.current) {
+        socketRef.current.emit('moveServoRelative', { pan, tilt });
       }
-    }, 100), // Adjust the delay as needed
-    [socket]
+    }, 100),
+    []
   );
+
+  // Socket connection setup
+  useEffect(() => {
+    const cleanup = () => {
+      if (socketRef.current) {
+        console.log('Cleaning up socket connection');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+
+    if (!socketRef.current) {
+      console.log('Initializing socket connection');
+      
+      const socket = io('http://192.168.68.68:3000/frontend', {
+        transports: ['websocket'],
+        upgrade: false,
+        forceNew: true,
+        reconnection: false,
+        timeout: 5000,
+        autoConnect: false,
+        maxPayload: 64000
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        setIsConnected(false);
+        cleanup();
+      });
+
+      socket.on('connect', () => {
+        console.log('Socket connected');
+        setIsConnected(true);
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Socket disconnected');
+        setIsConnected(false);
+        cleanup();
+      });
+
+      let lastFrameTime = Date.now();
+      const FRAME_THROTTLE = 100;
+
+      socket.on('videoFrame', (frameData) => {
+        const now = Date.now();
+        if (now - lastFrameTime >= FRAME_THROTTLE) {
+          setVideoFrame(frameData);
+          lastFrameTime = now;
+        }
+      });
+
+      socket.on('detections', (data) => {
+        setDetections(data);
+        if (data.length > 0) {
+          const personDetection = data.find(d => d.class === 'person');
+          if (personDetection) {
+            adjustServosToFollow(personDetection.box);
+          }
+        }
+      });
+
+      socketRef.current = socket;
+
+      try {
+        socket.connect();
+      } catch (error) {
+        console.error('Failed to connect socket:', error);
+        cleanup();
+      }
+    }
+
+    return cleanup;
+  }, []);
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        e.preventDefault(); // Prevent default scrolling behavior
-        setKeysPressed((prevKeys) => ({
-          ...prevKeys,
-          [e.key]: true,
-        }));
+        e.preventDefault();
+        setKeysPressed(prev => ({ ...prev, [e.key]: true }));
       }
     };
 
     const handleKeyUp = (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
-        setKeysPressed((prevKeys) => ({
-          ...prevKeys,
-          [e.key]: false,
-        }));
+        setKeysPressed(prev => ({ ...prev, [e.key]: false }));
       }
     };
 
@@ -236,25 +314,17 @@ function App() {
     };
   }, []);
 
-  // Throttle the servo movement when arrow keys are held down
+  // Servo movement handling
   useEffect(() => {
     let lastMoveTime = 0;
-    const throttleDelay = 100; // milliseconds
+    const throttleDelay = 100;
 
     const moveServos = (timestamp) => {
       if (!lastMoveTime || timestamp - lastMoveTime >= throttleDelay) {
-        if (keysPressed['ArrowUp']) {
-          moveServoRelative(0, MOVEMENT_AMOUNT);
-        }
-        if (keysPressed['ArrowDown']) {
-          moveServoRelative(0, -MOVEMENT_AMOUNT);
-        }
-        if (keysPressed['ArrowLeft']) {
-          moveServoRelative(MOVEMENT_AMOUNT, 0);
-        }
-        if (keysPressed['ArrowRight']) {
-          moveServoRelative(-MOVEMENT_AMOUNT, 0);
-        }
+        if (keysPressed['ArrowUp']) moveServoRelative(0, MOVEMENT_AMOUNT);
+        if (keysPressed['ArrowDown']) moveServoRelative(0, -MOVEMENT_AMOUNT);
+        if (keysPressed['ArrowLeft']) moveServoRelative(MOVEMENT_AMOUNT, 0);
+        if (keysPressed['ArrowRight']) moveServoRelative(-MOVEMENT_AMOUNT, 0);
         lastMoveTime = timestamp;
       }
       animationFrameId = requestAnimationFrame(moveServos);
@@ -268,10 +338,8 @@ function App() {
   }, [keysPressed, moveServoRelative]);
 
   const handleButtonPress = (direction) => {
-    // Update the button state to active
-    setButtonStates((prev) => ({ ...prev, [direction]: true }));
+    setButtonStates(prev => ({ ...prev, [direction]: true }));
 
-    // Move the servo
     switch (direction) {
       case 'up':
         moveServoRelative(0, MOVEMENT_AMOUNT);
@@ -289,95 +357,42 @@ function App() {
         break;
     }
 
-    // Reset the button state after a short delay
     setTimeout(() => {
-      setButtonStates((prev) => ({ ...prev, [direction]: false }));
-    }, 100); // Adjust the delay as needed
+      setButtonStates(prev => ({ ...prev, [direction]: false }));
+    }, 100);
   };
 
   const handleSprayWater = () => {
-    if (socket) {
-      socket.emit('activateWater', 500); // Adjust duration as needed
+    if (socketRef.current) {
+      socketRef.current.emit('activateWater', 500);
     }
   };
 
-  const handleVideoClick = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-    setCrosshairPosition({ x, y });
-  };
-
   const adjustServosToFollow = useCallback((boundingBox) => {
-    // boundingBox format: [ymin, xmin, ymax, xmax] normalized between 0 and 1
     const [ymin, xmin, ymax, xmax] = boundingBox;
-
-    // Calculate center of bounding box
     const centerX = (xmin + xmax) / 2;
     const centerY = (ymin + ymax) / 2;
 
-    // Map centerX and centerY to percentages
-    const crosshairX = centerX * 100;
-    const crosshairY = centerY * 100;
+    const deltaX = (centerX - 0.5) * 2;
+    const deltaY = (centerY - 0.5) * 2;
 
-    // Update crosshair position (optional)
-    setCrosshairPosition({ x: crosshairX, y: crosshairY });
-
-    // Map crosshair position to servo movement
-    const deltaX = crosshairX - 50; // Range -50 to +50
-    const deltaY = crosshairY - 50;
-
-    const panMovement = -deltaX * 0.1; // Adjust scaling factor as needed
-    const tiltMovement = deltaY * 0.1;
+    const panMovement = -deltaX * 5;
+    const tiltMovement = deltaY * 5;
 
     moveServoRelativeDebounced(panMovement, tiltMovement);
   }, [moveServoRelativeDebounced]);
-
-  // Socket connection and event handlers
-  useEffect(() => {
-    const newSocket = io('http://192.168.68.68:3000/frontend'); // Adjust the URL if needed
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('Socket connected');
-    });
-
-    newSocket.on('videoFrame', (frameData) => {
-      setVideoFrame(frameData);
-    });
-
-    newSocket.on('detections', (data) => {
-      console.log('Detections received:', data);
-      setDetections(data);
-
-      if (data.length > 0) {
-        const personDetection = data.find(d => d.class === 'person');
-        if (personDetection) {
-          adjustServosToFollow(personDetection.box);
-        }
-      }
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
-
-    return () => {
-      newSocket.close();
-    };
-  }, [adjustServosToFollow]);
 
   return (
     <Container>
       <Title>System Control Panel</Title>
       <Panel>
-        {/* Main video feed */}
         <ControlCard>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Camera Feed</h2>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>
+            Camera Feed {isConnected ? '(Connected)' : '(Disconnected)'}
+          </h2>
           <LiveFeedContainer>
-            {videoFrame ? (
-              <VideoOverlayContainer onClick={handleVideoClick}>
+            {isConnected && videoFrame ? (
+              <VideoOverlayContainer>
                 <Video
                   src={`data:image/jpeg;base64,${videoFrame}`}
                   alt="Live Feed"
@@ -386,7 +401,6 @@ function App() {
                 {detections.map((detection, index) => {
                   const { box, class: className, score } = detection;
                   const [ymin, xmin, ymax, xmax] = box;
-
                   return (
                     <BoundingBox
                       key={index}
@@ -401,12 +415,13 @@ function App() {
                 })}
               </VideoOverlayContainer>
             ) : (
-              <NoImage>Waiting for video feed...</NoImage>
+              <NoImage>
+                {isConnected ? 'Waiting for video feed...' : 'Disconnected - Trying to reconnect...'}
+              </NoImage>
             )}
           </LiveFeedContainer>
         </ControlCard>
 
-        {/* Controls section */}
         <ControlsWrapper>
           <ControlCard>
             <ControlGrid>
@@ -426,7 +441,7 @@ function App() {
                 ◄
               </DirectionButton>
               <DirectionButton
-                onClick={() => socket?.emit('centerServo')}
+                onClick={() => socketRef.current?.emit('centerServo')}
                 center
               >
                 ⟲
@@ -449,52 +464,22 @@ function App() {
             </ControlGrid>
 
             <ActionButtonContainer>
-              <ActionButton onClick={() => socket?.emit('takePhoto')}>
+              <ActionButton onClick={() => socketRef.current?.emit('takePhoto')}>
                 📸 Take Photo
               </ActionButton>
-              <ActionButton
-                onClick={handleSprayWater}
-                water
-              >
+              <ActionButton onClick={handleSprayWater} water>
                 💧 Spray Water
               </ActionButton>
-              <ActionButton onClick={() => socket?.emit('startScan')}>
+              <ActionButton onClick={() => socketRef.current?.emit('startScan')}>
                 🔍 Scan
               </ActionButton>
             </ActionButtonContainer>
-
-            {systemStatus && (
-              <StatusGrid>
-                <StatusItem>Pan Queue: {systemStatus.panQueueLength}</StatusItem>
-                <StatusItem>Tilt Queue: {systemStatus.tiltQueueLength}</StatusItem>
-                <StatusItem>Pan: {systemStatus.currentPosition?.pan}</StatusItem>
-                <StatusItem>Tilt: {systemStatus.currentPosition?.tilt}</StatusItem>
-              </StatusGrid>
-            )}
-          </ControlCard>
-
-          {/* Captures section */}
-          <ControlCard>
-            <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#64ffda' }}>Captures</h2>
-            {detection && detection.image && (
-              <div>
-                <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
-                  Last capture at: {new Date(detection.timestamp).toLocaleTimeString()}
-                </p>
-                <img
-                  src={`data:image/jpeg;base64,${detection.image}`}
-                  alt="Capture"
-                  style={{
-                    width: '100%',
-                    borderRadius: '0.5rem',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                  }}
-                />
-              </div>
-            )}
           </ControlCard>
         </ControlsWrapper>
       </Panel>
+      <ConnectionStatus connected={isConnected}>
+        {isConnected ? 'Connected' : 'Disconnected'}
+      </ConnectionStatus>
     </Container>
   );
 }
