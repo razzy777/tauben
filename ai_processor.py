@@ -27,8 +27,8 @@ def init_hailo():
         vdevice = VDevice()
         print("VDevice created successfully")
 
-        # Load HEF file
-        hef_path = '/home/johannes/tauben/venv/lib/python3.9/site-packages/hailo_tutorials/hefs/resnet_v1_18.hef'
+        # Load YOLOv5 HEF file
+        hef_path = '/home/johannes/Downloads/yolov5s.hef'  # Path to your yolov5s.hef file
         print(f"Loading HEF file from: {hef_path}")
         hef = HEF(hef_path)
         print("HEF loaded successfully")
@@ -71,6 +71,47 @@ def init_hailo():
         traceback.print_exc()
         return None, None
 
+def preprocess_frame(frame, input_shape=(640, 640)):
+    """Preprocess frame for YOLOv5 inference"""
+    # Resize to model input size
+    resized = cv2.resize(frame, input_shape)
+    # Convert to RGB
+    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    # Normalize and transpose
+    normalized = rgb.astype(np.float32) / 255.0
+    transposed = np.transpose(normalized, (2, 0, 1))  # Convert to CHW format
+    # Add batch dimension
+    batched = np.expand_dims(transposed, axis=0)
+    print(f"Preprocessed frame shape: {batched.shape}")
+    return batched
+
+def postprocess(outputs, input_shape=(640, 640)):
+    """Postprocess YOLOv5 outputs"""
+    detections = []
+    try:
+        # Get output tensor
+        output_name = list(outputs.keys())[0]
+        output_tensor = outputs[output_name]
+
+        # Decode YOLO outputs (simplified example)
+        for det in output_tensor[0]:  # Iterate over detections
+            conf = det[4]
+            if conf > 0.5:  # Confidence threshold
+                x, y, w, h = det[:4]
+                x1 = int((x - w / 2) * input_shape[1])
+                y1 = int((y - h / 2) * input_shape[0])
+                x2 = int((x + w / 2) * input_shape[1])
+                y2 = int((y + h / 2) * input_shape[0])
+                detections.append({'bbox': [x1, y1, x2, y2], 'confidence': conf})
+        print(f"Processed detections: {detections}")
+
+    except Exception as e:
+        print(f"Error processing outputs: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return detections
+
 def run_inference(network_group, preprocessed_frame):
     try:
         # Get input stream name
@@ -92,47 +133,6 @@ def run_inference(network_group, preprocessed_frame):
         import traceback
         traceback.print_exc()
         return None
-
-def preprocess_frame(frame, input_shape=(224, 224)):
-    """Preprocess frame for inference"""
-    # Resize to model input size
-    resized = cv2.resize(frame, input_shape)
-    # Convert to RGB
-    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-    # Normalize
-    normalized = rgb.astype(np.float32) / 255.0
-    # Add batch dimension
-    batched = np.expand_dims(normalized, axis=0)
-    print(f"Preprocessed frame shape: {batched.shape}")
-    return batched
-
-def process_outputs(outputs):
-    """Process model outputs"""
-    detections = []
-    
-    try:
-        # Get output tensor name
-        output_name = list(outputs.keys())[0]
-        scores = outputs[output_name][0]  # Get scores from first batch
-        
-        # Get top prediction
-        max_score_idx = np.argmax(scores)
-        max_score = float(scores[max_score_idx])
-        
-        if max_score > 0.5:  # Confidence threshold
-            detection = {
-                'class': int(max_score_idx),
-                'score': max_score
-            }
-            detections.append(detection)
-            print(f"Detected class {max_score_idx} with confidence {max_score}")
-
-    except Exception as e:
-        print(f"Error processing outputs: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    return detections
 
 # Socket.IO event handlers
 @sio.event
@@ -166,7 +166,7 @@ def on_video_frame(frame_data):
         if network_group:
             outputs = run_inference(network_group, processed_frame)
             if outputs:
-                detections = process_outputs(outputs)
+                detections = postprocess(outputs, input_shape)
                 if detections:
                     print(f"Found {len(detections)} detections")
                     sio.emit('aiDetections', detections)
