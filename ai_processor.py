@@ -5,6 +5,7 @@ import base64
 from hailo_platform.pyhailort.pyhailort import (
     Device,
     VDevice,
+    VDeviceParams,
     ConfigureParams,
     InferVStreams,
     HailoRTException,
@@ -20,8 +21,9 @@ def init_hailo():
         device_id = device.device_id
         print(f"Found device with ID: {device_id}")
 
-        # Create VDevice
-        vdevice = VDevice(device)  # Pass device to VDevice constructor
+        # Create VDevice with proper parameters
+        vdevice_params = VDeviceParams()
+        vdevice = VDevice(vdevice_params)
         print("VDevice created successfully")
 
         # Load YOLOv5 HEF file
@@ -36,9 +38,8 @@ def init_hailo():
 
         # Configure params
         configure_params = ConfigureParams()
-        configure_params.stream_interface = device.get_default_stream_interface()
         configure_params.batch_size = 1
-
+        
         # Configure the device
         network_groups = vdevice.configure(hef, configure_params)
         network_group = network_groups[0]  # Get first network group
@@ -66,6 +67,7 @@ def init_hailo():
         import traceback
         traceback.print_exc()
         return None, None
+
 
 
 
