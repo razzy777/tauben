@@ -16,7 +16,13 @@ const io = socketIo(server, {
   cors: {
     origin: "*", // Replace with your frontend domain in production
     methods: ["GET", "POST"]
-  }
+  }, 
+  transports: ['websocket'],
+  upgrade: false,
+  maxHttpBufferSize: 64000,
+  pingTimeout: 10000,
+  perMessageDeflate: false
+
 });
 
 // Create namespaces
