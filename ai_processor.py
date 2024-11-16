@@ -28,13 +28,27 @@ def init_hailo():
         hef_path = '/home/johannes/Downloads/yolov5s.hef'
         print(f"Loading HEF file from: {hef_path}")
         hef = HEF(hef_path)
-        # Get the underlying low-level HEF object
         hef_low_level = hef._hef
         print("HEF loaded successfully")
 
-        # Get network group names
+        # Get network group names and print detailed information
         network_group_names = hef.get_network_group_names()
         print(f"Network groups found: {network_group_names}")
+        
+        # Print HEF info
+        print("\nDetailed HEF Information:")
+        for group_name in network_group_names:
+            print(f"\nNetwork Group: {group_name}")
+            try:
+                # Get network info
+                network_info = hef.get_network_info(group_name)
+                print(f"Network Info: {network_info}")
+                
+                # Get network group properties
+                properties = hef.get_network_group_properties(group_name)
+                print(f"Properties: {properties}")
+            except Exception as e:
+                print(f"Error getting network info: {e}")
 
         # Create configure params for each network group
         configure_params_dict = {}
@@ -44,29 +58,37 @@ def init_hailo():
             configure_params_dict[group_name] = params
         
         # Configure the device
-        print("Configuring network groups...")
+        print("\nConfiguring network groups...")
         print(f"VDevice type: {type(vdevice)}")
         print(f"HEF type: {type(hef_low_level)}")
         print(f"Configure params dict type: {type(configure_params_dict)}")
-        print(f"Configure params value type: {type(list(configure_params_dict.values())[0])}")
+        print(f"Configure params keys: {list(configure_params_dict.keys())}")
         
-        network_groups = vdevice.configure(hef_low_level, configure_params_dict)
-        network_group = network_groups[0]  # Get first network group
-        print("Network configured successfully")
+        try:
+            print("\nAttempting to configure device...")
+            network_groups = vdevice.configure(hef_low_level, configure_params_dict)
+            network_group = network_groups[0]
+            print("Network configured successfully")
 
-        # Print available stream information
-        input_vstreams = network_group.input_vstream_infos
-        output_vstreams = network_group.output_vstream_infos
-        
-        print("\nInput Streams:")
-        for name, info in input_vstreams.items():
-            print(f"- {name}: shape={info.shape}, format={info.format}")
+            # Print available stream information
+            input_vstreams = network_group.input_vstream_infos
+            output_vstreams = network_group.output_vstream_infos
             
-        print("\nOutput Streams:")
-        for name, info in output_vstreams.items():
-            print(f"- {name}: shape={info.shape}, format={info.format}")
+            print("\nInput Streams:")
+            for name, info in input_vstreams.items():
+                print(f"- {name}: shape={info.shape}, format={info.format}")
+                
+            print("\nOutput Streams:")
+            for name, info in output_vstreams.items():
+                print(f"- {name}: shape={info.shape}, format={info.format}")
 
-        return vdevice, network_group
+            return vdevice, network_group
+
+        except HailoRTException as e:
+            print(f"\nConfiguration error: {e}")
+            print(f"Error code: {e.status}")
+            print("Attempting to get more error details...")
+            return None, None
 
     except HailoRTException as e:
         print(f"Failed to initialize Hailo device: {e}")
@@ -76,6 +98,7 @@ def init_hailo():
         import traceback
         traceback.print_exc()
         return None, None
+
 
 # Initialize Socket.IO client
 sio = socketio.Client()
