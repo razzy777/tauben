@@ -7,7 +7,8 @@ from hailo_platform.pyhailort.pyhailort import (
     VDevice,
     ConfigureParams,
     InferVStreams,
-    HailoRTException
+    HailoRTException,
+    HEF
 )
 
 # Initialize Socket.IO client
@@ -22,19 +23,22 @@ def init_hailo():
         device_id = device.device_id
         print(f"Found device with ID: {device_id}")
 
-        # Create VDevice (no params needed for your version)
+        # Create VDevice
         vdevice = VDevice()
         print("VDevice created successfully")
 
-        # Path to your HEF file
+        # Load HEF file
         hef_path = '/home/johannes/tauben/venv/lib/python3.9/site-packages/hailo_tutorials/hefs/resnet_v1_18.hef'
         print(f"Loading HEF file from: {hef_path}")
+        hef = HEF(hef_path)
+        print("HEF loaded successfully")
 
-        # Create configure parameters
+        # Configure parameters
         configure_params = ConfigureParams()
+        print("Configure params created")
         
-        # Configure the device with the HEF file
-        network_groups = vdevice.configure(configure_params, hef_path)
+        # Configure the device with the HEF
+        network_groups = vdevice.configure(hef, configure_params)
         network_group = network_groups[0]  # Get first network group
         print("Network configured successfully")
 
