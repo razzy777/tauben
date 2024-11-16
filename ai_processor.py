@@ -300,6 +300,7 @@ def process_detections(outputs, frame_shape):
         for output_tensor in outputs.values():
             # Each detection should be: [x1, y1, x2, y2, conf, class_id]
             for detection in output_tensor:
+                print(f"Detection entry: {detection}")
                 if len(detection) >= 6:  # Make sure we have enough elements
                     confidence = float(detection[4])
                     if confidence > 0.5:  # Confidence threshold
