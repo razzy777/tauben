@@ -2,14 +2,6 @@ import cv2
 import numpy as np
 import socketio
 import base64
-from hailo_platform.pyhailort.pyhailort import (
-    Device,
-    VDevice,
-    ConfigureParams,
-    InferVStreams,
-    HailoRTException,
-    HEF,
-)
 from hailo_platform.pyhailort.pyhailort import _pyhailort
 
 def init_hailo():
@@ -17,7 +9,7 @@ def init_hailo():
         print("Initializing Hailo device...")
 
         # Create Device
-        device = Device()
+        device = _pyhailort.Device()
         device_id = device.device_id
         print(f"Found device with ID: {device_id}")
 
@@ -26,10 +18,10 @@ def init_hailo():
         vdevice = _pyhailort.VDevice.create(vdevice_params, [device_id])
         print("VDevice created successfully")
 
-        # Load YOLOv5 HEF file
+        # Load YOLOv5 HEF file using low-level _pyhailort
         hef_path = '/home/johannes/Downloads/yolov5s.hef'
         print(f"Loading HEF file from: {hef_path}")
-        hef = HEF(hef_path)
+        hef = _pyhailort.Hef(hef_path)
         print("HEF loaded successfully")
 
         # Get network group names
@@ -45,6 +37,11 @@ def init_hailo():
         
         # Configure the device
         print("Configuring network groups...")
+        print(f"VDevice type: {type(vdevice)}")
+        print(f"HEF type: {type(hef)}")
+        print(f"Configure params dict type: {type(configure_params_dict)}")
+        print(f"Configure params value type: {type(list(configure_params_dict.values())[0])}")
+        
         network_groups = vdevice.configure(hef, configure_params_dict)
         network_group = network_groups[0]  # Get first network group
         print("Network configured successfully")
@@ -63,16 +60,11 @@ def init_hailo():
 
         return vdevice, network_group
 
-    except HailoRTException as e:
-        print(f"Failed to initialize Hailo device: {e}")
-        return None, None
     except Exception as e:
         print(f"Unexpected error during Hailo initialization: {e}")
         import traceback
         traceback.print_exc()
         return None, None
-
-# The rest of your code remains the same
 
 # Initialize Socket.IO client
 sio = socketio.Client()
