@@ -25,9 +25,11 @@ class HailoAsyncInference:
         self.input_queue = input_queue
         self.output_queue = output_queue
         
-        # Create VDevice with round-robin scheduling
+        # Create VDevice with specific parameters
         params = VDevice.create_params()
         params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
+        # Set buffer size constraints
+        params.max_desc_page_size = 4096  # Match hardware limit
         
         # Initialize HEF and create inference model
         self.hef = HEF(hef_path)
@@ -43,6 +45,11 @@ class HailoAsyncInference:
             
         self.output_type = output_type
         self.send_original_frame = send_original_frame
+        
+        # Print model information
+        input_vstream_info = self.hef.get_input_vstream_infos()[0]
+        print(f"Model input shape: {input_vstream_info.shape}")
+        print(f"Model input format: {input_vstream_info.format}")
 
     def _set_input_type(self, input_type: str) -> None:
         self.infer_model.input().set_format_type(getattr(FormatType, input_type))
@@ -90,42 +97,68 @@ class HailoAsyncInference:
         return configured_infer_model.create_bindings(output_buffers=output_buffers)
 
     def run(self) -> None:
-        with self.infer_model.configure() as configured_infer_model:
-            while True:
-                batch_data = self.input_queue.get()
-                if batch_data is None:
-                    break  # Stop signal
-                
-                if self.send_original_frame:
-                    original_batch, preprocessed_batch = batch_data
-                else:
-                    preprocessed_batch = batch_data
+        try:
+            with self.infer_model.configure() as configured_infer_model:
+                while True:
+                    batch_data = self.input_queue.get()
+                    if batch_data is None:
+                        break  # Stop signal
+                    
+                    if self.send_original_frame:
+                        original_batch, preprocessed_batch = batch_data
+                    else:
+                        preprocessed_batch = batch_data
 
-                bindings_list = []
-                for frame in preprocessed_batch:
-                    bindings = self._create_bindings(configured_infer_model)
-                    bindings.input().set_buffer(np.array(frame))
-                    bindings_list.append(bindings)
+                    bindings_list = []
+                    for frame in preprocessed_batch:
+                        bindings = self._create_bindings(configured_infer_model)
+                        bindings.input().set_buffer(np.array(frame))
+                        bindings_list.append(bindings)
 
-                configured_infer_model.wait_for_async_ready(timeout_ms=10000)
-                job = configured_infer_model.run_async(
-                    bindings_list,
-                    partial(
-                        self.callback,
-                        input_batch=original_batch if self.send_original_frame else preprocessed_batch,
-                        bindings_list=bindings_list
+                    configured_infer_model.wait_for_async_ready(timeout_ms=10000)
+                    job = configured_infer_model.run_async(
+                        bindings_list,
+                        partial(
+                            self.callback,
+                            input_batch=original_batch if self.send_original_frame else preprocessed_batch,
+                            bindings_list=bindings_list
+                        )
                     )
-                )
-            job.wait(10000)  # Wait for the last job
+                job.wait(10000)  # Wait for the last job
+        except Exception as e:
+            print(f"Error in inference thread: {e}")
+            import traceback
+            traceback.print_exc()
 
 def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     """Preprocess frame for YOLOv5 inference."""
-    resized = cv2.resize(frame, (target_shape[2], target_shape[1]))
-    # Convert to RGB (YOLOv5 expects RGB)
-    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-    # Normalize to [0,1]
-    normalized = rgb.astype(np.float32) / 255.0
-    return normalized
+    # Ensure we're using uint8 data type
+    if frame.dtype != np.uint8:
+        frame = (frame * 255).astype(np.uint8)
+        
+    # Resize while maintaining aspect ratio
+    input_height, input_width = target_shape[1:3]
+    height, width = frame.shape[:2]
+    
+    # Calculate scaling factor
+    scale = min(input_width/width, input_height/height)
+    new_width = int(width * scale)
+    new_height = int(height * scale)
+    
+    # Resize image
+    resized = cv2.resize(frame, (new_width, new_height))
+    
+    # Create empty image with target size
+    new_img = np.zeros((input_height, input_width, 3), dtype=np.uint8)
+    
+    # Calculate padding
+    y_offset = (input_height - new_height) // 2
+    x_offset = (input_width - new_width) // 2
+    
+    # Place resized image in center
+    new_img[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized
+    
+    return new_img
 
 def init_hailo():
     try:
