@@ -36,12 +36,16 @@ def init_hailo():
         network_group_names = hef.get_network_group_names()
         print(f"Network groups found: {network_group_names}")
 
-        # Configure params
-        configure_params = ConfigureParams()
-        configure_params.batch_size = 1
+        # Create configure params for each network group
+        configure_params_dict = {}
+        for group_name in network_group_names:
+            params = _pyhailort.ConfigureParams()
+            params.batch_size = 1
+            configure_params_dict[group_name] = params
         
         # Configure the device
-        network_groups = vdevice.configure(hef, configure_params)
+        print("Configuring network groups...")
+        network_groups = vdevice.configure(hef, configure_params_dict)
         network_group = network_groups[0]  # Get first network group
         print("Network configured successfully")
 
@@ -69,7 +73,6 @@ def init_hailo():
         return None, None
 
 # The rest of your code remains the same
-
 
 # Initialize Socket.IO client
 sio = socketio.Client()
