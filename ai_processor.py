@@ -172,6 +172,36 @@ class HailoAsyncInference:
             import traceback
             traceback.print_exc()
 
+def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
+    """Preprocess frame for YOLOv5 inference."""
+    target_height, target_width = target_shape[0:2]
+    
+    # Ensure frame is contiguous and in the right format
+    if not frame.flags['C_CONTIGUOUS']:
+        frame = np.ascontiguousarray(frame)
+    
+    # Resize while maintaining aspect ratio
+    height, width = frame.shape[:2]
+    scale = min(target_width/width, target_height/height)
+    
+    new_width = int(width * scale)
+    new_height = int(height * scale)
+    
+    resized = cv2.resize(frame, (new_width, new_height))
+    
+    # Create black image with target size
+    new_img = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+    
+    # Calculate padding
+    y_offset = (target_height - new_height) // 2
+    x_offset = (target_width - new_width) // 2
+    
+    # Place resized image in center
+    new_img[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized
+    
+    print(f"Preprocessed image shape: {new_img.shape}, dtype: {new_img.dtype}")
+    return new_img
+
 def init_hailo():
     try:
         print("Starting Hailo initialization...")
@@ -196,7 +226,6 @@ def init_hailo():
         import traceback
         traceback.print_exc()
         return None, None, None
-
 
 # Initialize Socket.IO client
 sio = socketio.Client()
@@ -260,7 +289,6 @@ def main():
         
         # Start inference thread
         import threading
-        from functools import partial
         inference_thread = threading.Thread(target=hailo_inference.run)
         inference_thread.start()
         
