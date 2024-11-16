@@ -12,7 +12,7 @@ def init_hailo():
     try:
         print("Initializing Hailo device...")
         # Initialize Hailo device
-        device = hailort.Device()
+        device = pyhailort.Device()
         
         # Path to your HEF file
         hef_path = '/home/johannes/hailo_models/yolov5_person.hef'
