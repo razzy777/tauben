@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import socketio
 import base64
-from hailo_platform.pyhailort.pyhailort import (
+from hailort import (
     Device,
     VDevice,
     ConfigureParams,
@@ -10,6 +10,7 @@ from hailo_platform.pyhailort.pyhailort import (
     HailoRTException,
     HEF
 )
+
 
 # Initialize Socket.IO client
 sio = socketio.Client()
@@ -24,11 +25,11 @@ def init_hailo():
         print(f"Found device with ID: {device_id}")
 
         # Create VDevice
-        vdevice = VDevice()
+        vdevice = VDevice(device)  # Pass device to VDevice constructor
         print("VDevice created successfully")
 
         # Load YOLOv5 HEF file
-        hef_path = '/home/johannes/Downloads/yolov5s.hef'  # Path to your yolov5s.hef file
+        hef_path = '/home/johannes/Downloads/yolov5s.hef'
         print(f"Loading HEF file from: {hef_path}")
         hef = HEF(hef_path)
         print("HEF loaded successfully")
@@ -37,9 +38,12 @@ def init_hailo():
         network_group_names = hef.get_network_group_names()
         print(f"Network groups found: {network_group_names}")
 
-        # Configure the device with the HEF
-        # Instead of using make_configure_params, we'll configure directly
-        configure_params = ConfigureParams.create_from_hef(hef, interface=device)
+        # Configure params
+        configure_params = ConfigureParams()
+        configure_params.stream_interface = device.get_default_stream_interface()
+        configure_params.batch_size = 1
+
+        # Configure the device
         network_groups = vdevice.configure(hef, configure_params)
         network_group = network_groups[0]  # Get first network group
         print("Network configured successfully")
@@ -66,7 +70,7 @@ def init_hailo():
         import traceback
         traceback.print_exc()
         return None, None
-        
+
 def preprocess_frame(frame, input_shape=(640, 640)):
     """Preprocess frame for YOLOv5 inference"""
     # Resize to model input size
