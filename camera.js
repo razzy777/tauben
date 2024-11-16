@@ -10,82 +10,84 @@ function startVideoStream(frontendNamespace, aiNamespace) {
   }
 
   console.log('Starting video stream...');
-  console.log('Frontend namespace clients:', frontendNamespace.sockets.size);
-  console.log('AI namespace clients:', aiNamespace.sockets.size);
 
-  const command = 'ffmpeg';
+  const command = 'libcamera-vid';
   const args = [
-	'-f', 'v4l2',        // Capture from video4linux2
-	'-input_format', 'mjpeg', // Input format
-	'-video_size', '640x480',
-	'-i', '/dev/video0', // Adjust if your camera is on a different device
-	'-c:v', 'copy',      // Copy the video codec
-	'-f', 'image2pipe',  // Output format
-	'-'
+    '--codec', 'mjpeg',
+    '--width', '640',
+    '--height', '480',
+    '--framerate', '30',  // Updated to match your working test
+    '--timeout', '0',
+    '--output', '-',
+    '--nopreview'
   ];
-  
 
   console.log('Executing command:', command, args.join(' '));
 
   try {
-    // Check if libcamera-vid exists
-    const { execSync } = require('child_process');
-    try {
-      execSync('which libcamera-vid');
-      console.log('libcamera-vid found');
-    } catch (error) {
-      console.error('libcamera-vid not found in PATH');
-      return;
-    }
-
-    // Start video process
     videoProcess = spawn(command, args);
     console.log('Video process started with PID:', videoProcess.pid);
 
     let buffer = Buffer.from([]);
     let frameCount = 0;
+    let lastFrameTime = Date.now();
 
-    // Handle stdout data
-	let frameBuffer = Buffer.from([]);
+    videoProcess.stdout.on('data', (data) => {
+      try {
+        buffer = Buffer.concat([buffer, data]);
+        
+        let start = 0;
+        let end = 0;
 
-	videoProcess.stdout.on('data', (data) => {
-	  frameBuffer = Buffer.concat([frameBuffer, data]);
-	
-	  try {
-		while (frameBuffer.length > 0) {
-		  // Assume frames are separated by EOF (this may vary depending on the ffmpeg output)
-		  const eofIndex = frameBuffer.indexOf(Buffer.from([0xFF, 0xD9]));
-		  if (eofIndex === -1) break;
-	
-		  const frame = frameBuffer.slice(0, eofIndex + 2); // Include EOF
-		  frameBuffer = frameBuffer.slice(eofIndex + 2);
-	
-		  // Emit the frame to frontend and AI namespaces
-		  const base64Frame = frame.toString('base64');
-		  frontendNamespace.emit('videoFrame', base64Frame);
-		  if (frameCount % 15 === 0) {
-			aiNamespace.emit('videoFrame', base64Frame);
-		  }
-	
-		  frameCount++;
-		}
-	  } catch (error) {
-		console.error('Error processing video frame:', error);
-	  }
-	});
-	
-    // Handle stderr (camera info and errors)
+        while (true) {
+          start = buffer.indexOf(Buffer.from([0xFF, 0xD8]));
+          end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));
+
+          if (start !== -1 && end !== -1 && end > start) {
+            const frame = buffer.slice(start, end + 2);
+            frameCount++;
+            
+            if (frame.length > 1000) {
+              const currentTime = Date.now();
+              const fps = 1000 / (currentTime - lastFrameTime);
+              lastFrameTime = currentTime;
+
+              // Log every 100th frame to avoid console spam
+              if (frameCount % 100 === 0) {
+                console.log(`Frame ${frameCount}, Size: ${frame.length}, FPS: ${fps.toFixed(2)}`);
+              }
+
+              // Send to frontend
+              frontendNamespace.emit('videoFrame', frame.toString('base64'));
+
+              // Send to AI processor at a lower rate (every 500ms)
+              if (frameCount % 15 === 0) {  // At 30fps, this is every 500ms
+                const aiClients = Object.keys(aiNamespace.sockets).length;
+                if (aiClients > 0) {
+                  console.log('Sending frame to AI processor');
+                  aiNamespace.emit('videoFrame', frame.toString('base64'));
+                }
+              }
+            }
+            
+            buffer = buffer.slice(end + 2);
+          } else {
+            break;
+          }
+        }
+      } catch (error) {
+        console.error('Error processing video frame:', error);
+      }
+    });
+
     videoProcess.stderr.on('data', (data) => {
       console.log('Camera stderr:', data.toString());
     });
 
-    // Handle process errors
     videoProcess.on('error', (error) => {
       console.error('Camera process error:', error);
-      videoProcess = null;
     });
 
-    // Handle process exit
     videoProcess.on('exit', (code, signal) => {
       console.log('Camera process exited with code:', code, 'signal:', signal);
       videoProcess = null;
@@ -93,9 +95,6 @@ function startVideoStream(frontendNamespace, aiNamespace) {
 
   } catch (error) {
     console.error('Failed to start video stream:', error);
-    if (error.stack) {
-      console.error('Stack trace:', error.stack);
-    }
     videoProcess = null;
   }
 }
@@ -103,15 +102,9 @@ function startVideoStream(frontendNamespace, aiNamespace) {
 function stopVideoStream() {
   if (videoProcess) {
     console.log('Stopping video stream...');
-    try {
-      videoProcess.kill('SIGTERM');
-      console.log('Video process terminated');
-    } catch (error) {
-      console.error('Error stopping video stream:', error);
-    }
+    videoProcess.kill('SIGTERM');
     videoProcess = null;
-  } else {
-    console.log('No video stream to stop');
+    console.log('Video stream stopped');
   }
 }
 
