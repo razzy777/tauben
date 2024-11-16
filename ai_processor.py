@@ -295,15 +295,14 @@ def process_detections(outputs, frame_shape):
     
     # If outputs is a dictionary (multiple output tensors)
     if isinstance(outputs, dict):
-        # Process YOLOv5 output format
-        # This needs to be adjusted based on your model's specific output format
-        for output_tensor in outputs.values():
-            # Each detection should be: [x1, y1, x2, y2, conf, class_id]
+        for output_name, output_tensor in outputs.items():
+            print(f"Processing output tensor: {output_name}")
             for detection in output_tensor:
-                print(f"Detection entry: {detection}")
+                print(f"Detection entry: {detection}")  # Debugging line
                 if len(detection) >= 6:  # Make sure we have enough elements
                     confidence = float(detection[4])
-                    if confidence > 0.1:  # Confidence threshold
+                    print(f"Detection confidence: {confidence}")  # Debugging line
+                    if confidence > 0.1:  # Try lowering the threshold
                         # Normalize coordinates to 0-1 range
                         x1 = float(detection[0]) / width
                         y1 = float(detection[1]) / height
@@ -317,6 +316,7 @@ def process_detections(outputs, frame_shape):
                             'class_id': class_id
                         })
     
+    print(f"Detections: {detections}")  # Debugging line to verify final detections
     return detections
 
 def main():
