@@ -303,7 +303,7 @@ def process_detections(outputs, frame_shape):
                 print(f"Detection entry: {detection}")
                 if len(detection) >= 6:  # Make sure we have enough elements
                     confidence = float(detection[4])
-                    if confidence > 0.5:  # Confidence threshold
+                    if confidence > 0.1:  # Confidence threshold
                         # Normalize coordinates to 0-1 range
                         x1 = float(detection[0]) / width
                         y1 = float(detection[1]) / height
