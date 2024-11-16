@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import socketio
 import base64
-from hailo_platform.pyhailort.pyhailort import VDevice, HailoRTException, Hef
+from hailo_platform.pyhailort.pyhailort import VDevice, HailoRTException
 
 # Initialize Socket.IO client
 sio = socketio.Client()
@@ -19,14 +19,16 @@ def init_hailo():
         hef_path = '/home/johannes/tauben/venv/lib/python3.9/site-packages/hailo_tutorials/hefs/resnet_v1_18.hef'
         print(f"Loading HEF file from: {hef_path}")
 
-        # Create Hef object
-        hef = Hef(hef_path)
-        print("HEF loaded successfully")
-
-        # Configure the device with the HEF
-        network_groups = vdevice.configure(hef)
+        # Configure the device directly with the HEF file
+        network_groups = vdevice.configure_from_hef_file(hef_path)
         network_group = network_groups[0]  # Get first network group
         print("Network configured")
+
+        # Get input and output information
+        input_vstreams_info = network_group.get_input_vstream_infos()
+        output_vstreams_info = network_group.get_output_vstream_infos()
+        print("Input VStreams:", input_vstreams_info)
+        print("Output VStreams:", output_vstreams_info)
 
         return vdevice, network_group
     except HailoRTException as e:
@@ -76,6 +78,8 @@ def on_video_frame(frame_data):
 
     except Exception as e:
         print(f"Error processing frame: {e}")
+        import traceback
+        traceback.print_exc()
 
 def preprocess_frame(frame):
     """Preprocess frame for ResNet inference"""
@@ -92,22 +96,17 @@ def preprocess_frame(frame):
 def run_inference(preprocessed_frame):
     """Run inference on Hailo device"""
     try:
-        # Get input tensor info
-        input_info = network_group.get_input_infos()
-        output_info = network_group.get_output_infos()
+        # Get input vstream info
+        input_vstreams = network_group.get_input_vstream_infos()
+        input_name = list(input_vstreams.keys())[0]
         
-        print("Input info:", input_info)  # Debug print
-        print("Output info:", output_info)  # Debug print
-        
-        # Get the name of the input tensor
-        input_name = list(input_info.keys())[0]
-        
-        # Create input tensors
+        # Create input data dictionary
         input_data = {input_name: preprocessed_frame}
         
         # Run inference
-        outputs = network_group.infer(input_data)
-        print(f"Inference outputs: {outputs.keys()}")  # Debug print
+        with network_group.create_vstreams() as vstreams:
+            outputs = vstreams.infer(input_data)
+            print(f"Inference outputs: {outputs.keys()}")  # Debug print
         
         # Process outputs
         detections = process_outputs(outputs)
@@ -152,12 +151,6 @@ def main():
         if not device or not network_group:
             print("Failed to initialize Hailo device. Exiting...")
             return
-
-        print("Getting network group info...")
-        input_info = network_group.get_input_infos()
-        output_info = network_group.get_output_infos()
-        print("Input tensors:", input_info)
-        print("Output tensors:", output_info)
 
         # Connect to the Node.js server
         print("Connecting to server...")
