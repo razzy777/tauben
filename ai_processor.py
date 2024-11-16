@@ -31,41 +31,36 @@ def init_hailo():
         hef_low_level = hef._hef
         print("HEF loaded successfully")
 
-        # Get network group names and print detailed information
+        # Get network group names
         network_group_names = hef.get_network_group_names()
         print(f"Network groups found: {network_group_names}")
-        
-        # Print HEF info
-        print("\nDetailed HEF Information:")
-        for group_name in network_group_names:
-            print(f"\nNetwork Group: {group_name}")
-            try:
-                # Get network info
-                network_info = hef.get_network_info(group_name)
-                print(f"Network Info: {network_info}")
-                
-                # Get network group properties
-                properties = hef.get_network_group_properties(group_name)
-                print(f"Properties: {properties}")
-            except Exception as e:
-                print(f"Error getting network info: {e}")
 
         # Create configure params for each network group
         configure_params_dict = {}
         for group_name in network_group_names:
             params = _pyhailort.ConfigureParams()
             params.batch_size = 1
+            # Use just the group name without additional path
             configure_params_dict[group_name] = params
         
-        # Configure the device
-        print("\nConfiguring network groups...")
-        print(f"VDevice type: {type(vdevice)}")
-        print(f"HEF type: {type(hef_low_level)}")
-        print(f"Configure params dict type: {type(configure_params_dict)}")
-        print(f"Configure params keys: {list(configure_params_dict.keys())}")
-        
+        print("\nAttempting configuration with params:")
+        for name, params in configure_params_dict.items():
+            print(f"Network group: {name}")
+            print(f"Batch size: {params.batch_size}")
+
         try:
-            print("\nAttempting to configure device...")
+            # Try to get network group properties
+            print("\nNetwork Group Properties:")
+            network_groups = []
+            for group_name in network_group_names:
+                try:
+                    info = hef_low_level.get_network_group_metadata(group_name)
+                    print(f"Group: {group_name}")
+                    print(f"Metadata: {info}")
+                except Exception as e:
+                    print(f"Could not get metadata for {group_name}: {e}")
+            
+            print("\nConfiguring device...")
             network_groups = vdevice.configure(hef_low_level, configure_params_dict)
             network_group = network_groups[0]
             print("Network configured successfully")
@@ -86,8 +81,9 @@ def init_hailo():
 
         except HailoRTException as e:
             print(f"\nConfiguration error: {e}")
-            print(f"Error code: {e.status}")
-            print("Attempting to get more error details...")
+            print(f"Error details: {str(e)}")
+            if hasattr(e, 'status'):
+                print(f"Error status: {e.status}")
             return None, None
 
     except HailoRTException as e:
