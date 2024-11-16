@@ -3,6 +3,8 @@ const socketIo = require('socket.io');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { ServoController } = require('./relay');
+const servoSystem = require('./servoSystem');
+
 
 // Create the server
 const server = http.createServer();
@@ -154,7 +156,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('moveServoRelative', ({ pan, tilt }) => {
     try {
       console.log(`Moving servo relatively: pan=${pan}, tilt=${tilt}`);
-      relayController.moveRelative(pan, tilt);
+      servoSystem.moveRelative(pan, tilt);
     } catch (error) {
       console.error('Error moving servo:', error);
     }
@@ -164,7 +166,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('activateWater', async (duration) => {
     try {
       console.log(`Activating water for ${duration}ms`);
-      await relayController.activateWater(duration);
+      await servoSystem.activateWater(duration);
     } catch (error) {
       console.error('Error activating water:', error);
     }
@@ -174,7 +176,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('centerServo', () => {
     try {
       console.log('Centering servos');
-      relayController.center();
+      servoSystem.center();
     } catch (error) {
       console.error('Error centering servos:', error);
     }
@@ -184,7 +186,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('startScan', async () => {
     try {
       console.log('Starting scan');
-      await relayController.scan();
+      await servoSystem.scan();
     } catch (error) {
       console.error('Error during scan:', error);
     }
@@ -231,7 +233,7 @@ async function handleShutdown() {
   stopVideoStream();
   
   try {
-    await relayController.cleanup();
+    await servoSystem.cleanup();
     console.log('Relay controller cleaned up');
     
     server.close(() => {
