@@ -35,19 +35,21 @@ class HailoAsyncInference:
         self.hef = HEF(hef_path)
         
         # Print network information before creating device
-        input_vstream_info = self.hef.get_input_vstream_infos()[0]
-        print(f"Model input shape: {input_vstream_info.shape}")
-        print(f"Model input format: {input_vstream_info.format}")
+        input_vstream_infos = self.hef.get_input_vstream_infos()
+        output_vstream_infos = self.hef.get_output_vstream_infos()
+        
+        print(f"Model input shape: {input_vstream_infos[0].shape}")
+        print(f"Model input format: {input_vstream_infos[0].format}")
         
         # Create VDevice
         self.target = VDevice(params)
         print("VDevice created successfully")
         
-        # Create inference model with smaller batch size
+        # Create inference model
         self.infer_model = self.target.create_infer_model(hef_path)
         print("Created inference model")
         
-        # Set very small batch size to reduce memory requirements
+        # Set batch size
         self.infer_model.set_batch_size(1)
         print(f"Set batch size to 1")
         
@@ -65,12 +67,12 @@ class HailoAsyncInference:
         
         # Print stream information
         print("\nInput Streams:")
-        for name, info in self.hef.get_input_vstream_infos().items():
-            print(f"- {name}: shape={info.shape}, format={info.format}")
+        for i, info in enumerate(input_vstream_infos):
+            print(f"- Stream {i}: shape={info.shape}, format={info.format}")
         
         print("\nOutput Streams:")
-        for name, info in self.hef.get_output_vstream_infos().items():
-            print(f"- {name}: shape={info.shape}, format={info.format}")
+        for i, info in enumerate(output_vstream_infos):
+            print(f"- Stream {i}: shape={info.shape}, format={info.format}")
 
     def _set_input_type(self, input_type: str) -> None:
         self.infer_model.input().set_format_type(getattr(FormatType, input_type))
@@ -103,13 +105,14 @@ class HailoAsyncInference:
 
     def _create_bindings(self, configured_infer_model):
         try:
+            output_vstream_infos = self.hef.get_output_vstream_infos()
             if self.output_type is None:
                 output_buffers = {
-                    output_info.name: np.empty(
-                        tuple(self.infer_model.output(output_info.name).shape),
-                        dtype=np.dtype('float32')  # Default to float32
+                    str(i): np.empty(
+                        tuple(self.infer_model.output(i).shape),
+                        dtype=np.dtype('float32')
                     )
-                    for output_info in self.hef.get_output_vstream_infos()
+                    for i in range(len(output_vstream_infos))
                 }
             else:
                 output_buffers = {

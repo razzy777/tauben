@@ -16,7 +16,7 @@ function startVideoStream(frontendNamespace, aiNamespace) {
   const args = [
     '--codec', 'mjpeg',
     '--width', '640',
-    '--height', '480',
+    '--height', '640',
     '--framerate', '15',
     '--inline',
     '--nopreview',
