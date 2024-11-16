@@ -155,8 +155,8 @@ frontendNamespace.on('connection', (socket) => {
   // Handle servo movement
   socket.on('moveServoRelative', ({ pan, tilt }) => {
     try {
-      console.log(`Moving servo relatively: pan=${pan}, tilt=${tilt}`);
-      servoSystem.moveRelative(pan, tilt);
+        console.log(`Moving servo relatively: pan=${pan}, tilt=${tilt}`);
+        this.servoSystem.moveRelative(pan, tilt);
     } catch (error) {
       console.error('Error moving servo:', error);
     }
@@ -166,7 +166,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('activateWater', async (duration) => {
     try {
       console.log(`Activating water for ${duration}ms`);
-      await servoSystem.activateWater(duration);
+      await this.servoSystem.activateWater(duration);
     } catch (error) {
       console.error('Error activating water:', error);
     }
@@ -176,7 +176,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('centerServo', () => {
     try {
       console.log('Centering servos');
-      servoSystem.center();
+      this.servoSystem.center();
     } catch (error) {
       console.error('Error centering servos:', error);
     }
@@ -186,7 +186,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('startScan', async () => {
     try {
       console.log('Starting scan');
-      await servoSystem.scan();
+      await this.servoSystem.scan();
     } catch (error) {
       console.error('Error during scan:', error);
     }
@@ -233,7 +233,7 @@ async function handleShutdown() {
   stopVideoStream();
   
   try {
-    await servoSystem.cleanup();
+    await this.servoSystem.cleanup();
     console.log('Relay controller cleaned up');
     
     server.close(() => {
