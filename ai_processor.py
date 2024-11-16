@@ -227,16 +227,21 @@ def init_hailo():
         traceback.print_exc()
         return None, None, None
 
-# Initialize Socket.IO client
 sio = socketio.Client(
     logger=True,
-    engineio_logger=True
+    engineio_logger=True,
+    reconnection=True,
+    reconnection_attempts=5,
+    reconnection_delay=1
 )
-
 
 @sio.event(namespace='/ai')
 def connect():
     print('Connected to AI namespace')
+
+@sio.event(namespace='/ai')
+def connect_error(data):
+    print(f'Connection error: {data}')
 
 @sio.event(namespace='/ai')
 def disconnect():
@@ -324,11 +329,18 @@ def main():
 
         # Connect to the Node.js server's AI namespace
         print("\nConnecting to server...")
+        connection_url = 'http://localhost:3000'
+        print(f"Attempting to connect to {connection_url}")
+        
         sio.connect(
-            'http://localhost:3000',
+            connection_url,
             namespaces=['/ai'],
             wait_timeout=10,
-            transports=['websocket', 'polling']
+            transports=['websocket', 'polling'],
+            socketio_path='/socket.io',
+            headers={
+                'Content-Type': 'application/json',
+            }
         )
         print("Connected successfully")
         
@@ -336,15 +348,21 @@ def main():
         import threading
         inference_thread = threading.Thread(target=hailo_inference.run)
         inference_thread.start()
+        print("Started inference thread")
         
         # Keep the connection alive
+        print("Waiting for events...")
         sio.wait()
 
+    except socketio.exceptions.ConnectionError as e:
+        print(f"Socket.IO Connection error: {e}")
+        print("Error details:", getattr(e, 'args', ['No details available']))
     except Exception as e:
         print(f"Main error: {e}")
         import traceback
         traceback.print_exc()
     finally:
+        print("Cleaning up...")
         if input_queue:
             input_queue.put(None)  # Signal inference thread to stop
         if 'inference_thread' in locals():
