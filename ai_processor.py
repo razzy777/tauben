@@ -272,9 +272,10 @@ def on_video_frame(frame_data):
         original_frame, outputs = output_queue.get()
         
         if outputs:
-            print("Processing detection results...")
             # Convert outputs to detections format expected by the server
             detections = process_detections(outputs, frame.shape)
+            print("Processing detection results...", detections)
+
             if detections:
                 # Emit detections to server
                 sio.emit('aiDetections', detections, namespace='/ai')
