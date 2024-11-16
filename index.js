@@ -142,14 +142,14 @@ async function performScan() {
 
 // Socket connection handler for frontend clients
 frontendNamespace.on('connection', (socket) => {
-  console.log('Frontend client connected:', socket.id);
+    console.log('Frontend client connected:', socket.id);
+    console.log('Total frontend clients:', frontendNamespace.sockets.size);
 
-  // Start video stream if not already started
-  if (!videoStreamStarted) {
-    startVideoStream(frontendNamespace, aiNamespace);
-    videoStreamStarted = true;
-  }
-
+    if (!videoStreamStarted) {
+        console.log('Starting video stream for new frontend connection');
+        startVideoStream(frontendNamespace, aiNamespace);
+        videoStreamStarted = true;
+    }
   // Handle photo capture requests
   socket.on('takePhoto', async () => {
     try {
@@ -244,6 +244,7 @@ frontendNamespace.on('connection', (socket) => {
       videoStreamStarted = false;
     }
   });
+
 
 });
 
