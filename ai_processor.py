@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import socketio
 import base64
-import hailo_platform.pyhailort as pyhailort
+import hailo_platform.pyhailort._pyhailort as pyhailort
 
 
 # Initialize Socket.IO client
@@ -11,20 +11,26 @@ sio = socketio.Client()
 def init_hailo():
     try:
         print("Initializing Hailo device...")
-        # Initialize Hailo device
-        device = pyhailort.Device()
-        
+        # Initialize Hailo virtual device
+        vdevice = pyhailort.VDevice()
+
         # Path to your HEF file
         hef_path = '/home/johannes/hailo_models/yolov5_person.hef'
         
-        # Configure the network
-        network_group = device.configure(hef_path)
-        network_group_params = network_group.create_params()
-        
+        # Load the HEF file
+        hef = pyhailort.Hef(hef_path)
+
+        # Configure the device with the HEF
+        network_groups = vdevice.configure(hef)
+        network_group = network_groups[0]  # Use the first network group
+
         print("Hailo device initialized successfully")
-        return device, network_group
-    except Exception as e:
+        return vdevice, network_group
+    except pyhailort.HailoRTException as e:
         print(f"Failed to initialize Hailo device: {e}")
+        return None, None
+    except Exception as e:
+        print(f"Unexpected error during Hailo initialization: {e}")
         return None, None
 
 # Initialize Hailo device
