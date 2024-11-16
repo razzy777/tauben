@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 import socketio
 import base64
-import hailort
+import hailo_platform.pyhailort as pyhailort
+
 
 # Initialize Socket.IO client
 sio = socketio.Client()
