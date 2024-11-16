@@ -11,13 +11,33 @@ const relayController = new ServoController(588); // Replace with the appropriat
 
 const server = http.createServer();
 
-// Create a single Socket.IO server
 const io = socketIo(server, {
-  cors: {
-    origin: "*", // Replace with your frontend domain in production
-    methods: ["GET", "POST"]
-  }
-});
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    },
+    // Force WebSocket transport
+    transports: ['websocket'],
+    
+    // Ping timeout
+    pingTimeout: 10000,
+    pingInterval: 5000,
+    
+    // Connection throttling
+    connectTimeout: 10000,
+    
+    // Compression options
+    perMessageDeflate: false,
+    
+    // Buffer optimization
+    maxHttpBufferSize: 1e6, // 1 MB
+    
+    // Disconnect inactive clients
+    allowRequest: (req, callback) => {
+      callback(null, true); // Add any validation if needed
+    }
+  });
+  
 
 // Create namespaces
 const frontendNamespace = io.of('/frontend');
