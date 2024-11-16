@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import socketio
 import base64
-from hailo_platform.pyhailort import (
+from hailo_platform.pyhailort.pyhailort import (
     Device,
     VDevice,
     ConfigureParams,
@@ -66,6 +66,7 @@ def init_hailo():
         import traceback
         traceback.print_exc()
         return None, None
+
 
 
 # Initialize Socket.IO client
