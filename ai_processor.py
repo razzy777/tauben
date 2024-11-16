@@ -93,7 +93,7 @@ class HailoAsyncInference:
             for i, bindings in enumerate(bindings_list):
                 try:
                     if len(bindings._output_names) == 1:
-                        result = bindings.output().get_buffer()
+                        result = bindings.output(bindings._output_names[0]).get_buffer()
                     else:
                         result = {
                             name: np.expand_dims(bindings.output(name).get_buffer(), axis=0)
@@ -108,11 +108,11 @@ class HailoAsyncInference:
             output_vstream_infos = self.hef.get_output_vstream_infos()
             if self.output_type is None:
                 output_buffers = {
-                    str(i): np.empty(
-                        tuple(self.infer_model.output(i).shape),
+                    output_vstream_info.name: np.empty(
+                        tuple(self.infer_model.output(output_vstream_info.name).shape),
                         dtype=np.dtype('float32')
                     )
-                    for i in range(len(output_vstream_infos))
+                    for output_vstream_info in output_vstream_infos
                 }
             else:
                 output_buffers = {
