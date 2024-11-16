@@ -2,26 +2,34 @@ import cv2
 import numpy as np
 import socketio
 import base64
+from hailo_platform.pyhailort.pyhailort import (
+    Device,
+    HEF,
+    HailoRTException,
+    InferVStreams,
+)
 from hailo_platform.pyhailort.pyhailort import _pyhailort
 
 def init_hailo():
     try:
         print("Initializing Hailo device...")
 
-        # Create Device
-        device = _pyhailort.Device()
+        # Create Device using high-level API
+        device = Device()
         device_id = device.device_id
         print(f"Found device with ID: {device_id}")
 
-        # Create VDevice with proper parameters
+        # Create VDevice with proper parameters using low-level API
         vdevice_params = _pyhailort.VDeviceParams()
         vdevice = _pyhailort.VDevice.create(vdevice_params, [device_id])
         print("VDevice created successfully")
 
-        # Load YOLOv5 HEF file using low-level _pyhailort
+        # Load YOLOv5 HEF file using high-level API
         hef_path = '/home/johannes/Downloads/yolov5s.hef'
         print(f"Loading HEF file from: {hef_path}")
-        hef = _pyhailort.Hef(hef_path)
+        hef = HEF(hef_path)
+        # Get the underlying low-level HEF object
+        hef_low_level = hef._hef
         print("HEF loaded successfully")
 
         # Get network group names
@@ -38,11 +46,11 @@ def init_hailo():
         # Configure the device
         print("Configuring network groups...")
         print(f"VDevice type: {type(vdevice)}")
-        print(f"HEF type: {type(hef)}")
+        print(f"HEF type: {type(hef_low_level)}")
         print(f"Configure params dict type: {type(configure_params_dict)}")
         print(f"Configure params value type: {type(list(configure_params_dict.values())[0])}")
         
-        network_groups = vdevice.configure(hef, configure_params_dict)
+        network_groups = vdevice.configure(hef_low_level, configure_params_dict)
         network_group = network_groups[0]  # Get first network group
         print("Network configured successfully")
 
@@ -60,6 +68,9 @@ def init_hailo():
 
         return vdevice, network_group
 
+    except HailoRTException as e:
+        print(f"Failed to initialize Hailo device: {e}")
+        return None, None
     except Exception as e:
         print(f"Unexpected error during Hailo initialization: {e}")
         import traceback
