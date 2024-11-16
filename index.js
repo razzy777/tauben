@@ -2,7 +2,7 @@
 const http = require('http');
 const socketIo = require('socket.io');
 const fs = require('fs');
-const { startVideoStream, stopVideoStream } = require('./camera');
+const { startVideoStream, stopVideoStream, testCamera } = require('./camera');
 const servoSystem = require('./servoSystem');
 const { ServoController } = require('./relay');
 
@@ -41,6 +41,12 @@ async function initializeSystem() {
     // Initialize relay controller
     await relayController.init();
     console.log('Relay controller initialized');
+    // In server.js, modify initializeSystem():
+      console.log('Initializing system components...');
+  
+      // Test camera first
+      await testCamera();
+      console.log('Camera test passed');
 
     // Start the server
     server.listen(3000, () => {
@@ -302,6 +308,7 @@ async function handleShutdown() {
     process.exit(1);
   }
 }
+
 
 // Handle termination signals
 process.on('SIGINT', handleShutdown);
