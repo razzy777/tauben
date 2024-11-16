@@ -21,7 +21,10 @@ const io = socketIo(server, {
 
 // Create namespaces
 const frontendNamespace = io.of('/frontend');
+console.log('Frontend namespace created');
+
 const aiNamespace = io.of('/ai');
+console.log('AI namespace created');
 
 // Flag to prevent multiple video streams
 let videoStreamStarted = false;
@@ -233,34 +236,37 @@ frontendNamespace.on('connection', (socket) => {
   // Handle client disconnect
   socket.on('disconnect', () => {
     console.log('Frontend client disconnected:', socket.id);
+    console.log('Remaining frontend clients:', frontendNamespace.sockets.size);
 
-    // Optionally stop the video stream if no clients are connected
     if (frontendNamespace.sockets.size === 0) {
+      console.log('No frontend clients left, stopping video stream');
       stopVideoStream();
       videoStreamStarted = false;
     }
   });
+
 });
 
-// Socket connection handler for AI processor
+// Update the AI connection handler
 aiNamespace.on('connection', (socket) => {
-  console.log('Python AI processor connected:', socket.id);
-
-  socket.on('aiDetections', (detections) => {
-    // Broadcast detections to connected frontend clients
-    frontendNamespace.emit('detections', detections);
-
-    // Implement logic to move servos based on detections
-    if (detections && detections.length > 0) {
-      const personDetection = detections[0];  // Using the first detected person
-      adjustServosToFollow(personDetection.box);
-    }
+    console.log('AI client connected:', socket.id);
+    console.log('Total AI clients:', aiNamespace.sockets.size);
+    socket.on('aiDetections', (detections) => {
+        // Broadcast detections to connected frontend clients
+        frontendNamespace.emit('detections', detections);
+    
+        // Implement logic to move servos based on detections
+        if (detections && detections.length > 0) {
+          const personDetection = detections[0];  // Using the first detected person
+          adjustServosToFollow(personDetection.box);
+        }
+      });
+    
+    socket.on('disconnect', () => {
+      console.log('AI client disconnected:', socket.id);
+      console.log('Remaining AI clients:', aiNamespace.sockets.size);
+    });
   });
-
-  socket.on('disconnect', () => {
-    console.log('Python AI processor disconnected:', socket.id);
-  });
-});
 
 // Error handling for uncaught exceptions
 process.on('uncaughtException', (error) => {
