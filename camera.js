@@ -13,17 +13,17 @@ function startVideoStream(frontendNamespace, aiNamespace) {
   console.log('Frontend namespace clients:', frontendNamespace.sockets.size);
   console.log('AI namespace clients:', aiNamespace.sockets.size);
 
-  const command = 'libcamera-vid';
+  const command = 'ffmpeg';
   const args = [
-    '--codec', 'mjpeg',
-    '--width', '640',
-    '--height', '480',
-    '--framerate', '30',
-    '--inline',  // Added inline flag
-    '--nopreview',
-    '--timeout', '0',
-    '--output', '-'
+	'-f', 'v4l2',        // Capture from video4linux2
+	'-input_format', 'mjpeg', // Input format
+	'-video_size', '640x480',
+	'-i', '/dev/video0', // Adjust if your camera is on a different device
+	'-c:v', 'copy',      // Copy the video codec
+	'-f', 'image2pipe',  // Output format
+	'-'
   ];
+  
 
   console.log('Executing command:', command, args.join(' '));
 
@@ -46,56 +46,34 @@ function startVideoStream(frontendNamespace, aiNamespace) {
     let frameCount = 0;
 
     // Handle stdout data
-    videoProcess.stdout.on('data', (data) => {
-      try {
-        if (frameCount === 0) {
-          console.log('First video data received');
-        }
-        
-        buffer = Buffer.concat([buffer, data]);
-        let start = 0;
-        let end = 0;
+	let frameBuffer = Buffer.from([]);
 
-        while (true) {
-          start = buffer.indexOf(Buffer.from([0xFF, 0xD8]));
-          end = buffer.indexOf(Buffer.from([0xFF, 0xD9]));
-
-          if (start !== -1 && end !== -1 && end > start) {
-            const frame = buffer.slice(start, end + 2);
-            frameCount++;
-
-            if (frame.length > 1000) {
-              if (frameCount % 30 === 0) {  // Log every 30 frames
-                console.log(`Frame ${frameCount}, Size: ${frame.length} bytes`);
-              }
-
-              // Send to frontend
-              const frontendClients = frontendNamespace.sockets.size;
-              if (frontendClients > 0) {
-                frontendNamespace.emit('videoFrame', frame.toString('base64'));
-                if (frameCount % 30 === 0) {
-                  console.log('Frame sent to frontend clients:', frontendClients);
-                }
-              }
-
-              // Send to AI (every 15th frame)
-              const aiClients = aiNamespace.sockets.size;
-              if (aiClients > 0 && frameCount % 15 === 0) {
-                aiNamespace.emit('videoFrame', frame.toString('base64'));
-                console.log('Frame sent to AI clients:', aiClients);
-              }
-            }
-
-            buffer = buffer.slice(end + 2);
-          } else {
-            break;
-          }
-        }
-      } catch (error) {
-        console.error('Error processing video frame:', error);
-      }
-    });
-
+	videoProcess.stdout.on('data', (data) => {
+	  frameBuffer = Buffer.concat([frameBuffer, data]);
+	
+	  try {
+		while (frameBuffer.length > 0) {
+		  // Assume frames are separated by EOF (this may vary depending on the ffmpeg output)
+		  const eofIndex = frameBuffer.indexOf(Buffer.from([0xFF, 0xD9]));
+		  if (eofIndex === -1) break;
+	
+		  const frame = frameBuffer.slice(0, eofIndex + 2); // Include EOF
+		  frameBuffer = frameBuffer.slice(eofIndex + 2);
+	
+		  // Emit the frame to frontend and AI namespaces
+		  const base64Frame = frame.toString('base64');
+		  frontendNamespace.emit('videoFrame', base64Frame);
+		  if (frameCount % 15 === 0) {
+			aiNamespace.emit('videoFrame', base64Frame);
+		  }
+	
+		  frameCount++;
+		}
+	  } catch (error) {
+		console.error('Error processing video frame:', error);
+	  }
+	});
+	
     // Handle stderr (camera info and errors)
     videoProcess.stderr.on('data', (data) => {
       console.log('Camera stderr:', data.toString());
