@@ -5,12 +5,12 @@ import base64
 from hailo_platform.pyhailort.pyhailort import (
     Device,
     VDevice,
-    VDeviceParams,
     ConfigureParams,
     InferVStreams,
     HailoRTException,
-    HEF
+    HEF,
 )
+from hailo_platform.pyhailort.pyhailort import _pyhailort
 
 def init_hailo():
     try:
@@ -22,8 +22,8 @@ def init_hailo():
         print(f"Found device with ID: {device_id}")
 
         # Create VDevice with proper parameters
-        vdevice_params = VDeviceParams()
-        vdevice = VDevice(vdevice_params)
+        vdevice_params = _pyhailort.VDeviceParams()
+        vdevice = _pyhailort.VDevice.create(vdevice_params, [device_id])
         print("VDevice created successfully")
 
         # Load YOLOv5 HEF file
@@ -68,7 +68,7 @@ def init_hailo():
         traceback.print_exc()
         return None, None
 
-
+# The rest of your code remains the same
 
 
 # Initialize Socket.IO client
