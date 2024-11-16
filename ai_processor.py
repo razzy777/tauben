@@ -33,12 +33,18 @@ def init_hailo():
         hef = HEF(hef_path)
         print("HEF loaded successfully")
 
-        # Configure parameters
-        configure_params = ConfigureParams()
-        print("Configure params created")
+        # Get network group names
+        network_group_names = hef.get_network_group_names()
+        print(f"Network groups found: {network_group_names}")
+
+        # Create configure params dictionary
+        configure_params_dict = {
+            name: ConfigureParams() for name in network_group_names
+        }
+        print("Configure params dictionary created")
         
         # Configure the device with the HEF
-        network_groups = vdevice.configure(hef, configure_params)
+        network_groups = vdevice.configure(hef, configure_params_dict)
         network_group = network_groups[0]  # Get first network group
         print("Network configured successfully")
 
@@ -67,15 +73,15 @@ def init_hailo():
 
 def run_inference(network_group, preprocessed_frame):
     try:
-        # Get the name of the input stream
+        # Get input stream name
         input_name = list(network_group.input_vstream_infos.keys())[0]
+        print(f"Using input stream: {input_name}")
         
         # Prepare input data
         input_data = {input_name: preprocessed_frame}
         
-        # Create inference streams
+        # Create inference streams and run inference
         with InferVStreams(network_group) as infer:
-            # Run inference
             outputs = infer.infer(input_data)
             print(f"Inference outputs: {list(outputs.keys())}")
             
@@ -87,20 +93,21 @@ def run_inference(network_group, preprocessed_frame):
         traceback.print_exc()
         return None
 
-def preprocess_frame(frame):
-    """Preprocess frame for ResNet inference"""
+def preprocess_frame(frame, input_shape=(224, 224)):
+    """Preprocess frame for inference"""
     # Resize to model input size
-    resized = cv2.resize(frame, (224, 224))
+    resized = cv2.resize(frame, input_shape)
     # Convert to RGB
     rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
     # Normalize
     normalized = rgb.astype(np.float32) / 255.0
     # Add batch dimension
     batched = np.expand_dims(normalized, axis=0)
+    print(f"Preprocessed frame shape: {batched.shape}")
     return batched
 
 def process_outputs(outputs):
-    """Process ResNet outputs"""
+    """Process model outputs"""
     detections = []
     
     try:
@@ -148,8 +155,12 @@ def on_video_frame(frame_data):
             print("Error: Could not decode frame")
             return
 
+        # Get input shape from network
+        input_info = next(iter(network_group.input_vstream_infos.values()))
+        input_shape = tuple(input_info.shape[1:3])  # Height, Width
+        
         # Preprocess frame
-        processed_frame = preprocess_frame(frame)
+        processed_frame = preprocess_frame(frame, input_shape)
 
         # Run inference
         if network_group:
