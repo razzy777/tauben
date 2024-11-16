@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import socketio
 import base64
-from hailort import (
+from hailo_platform.pyhailort import (
     Device,
     VDevice,
     ConfigureParams,
@@ -10,10 +10,6 @@ from hailort import (
     HailoRTException,
     HEF
 )
-
-
-# Initialize Socket.IO client
-sio = socketio.Client()
 
 def init_hailo():
     try:
@@ -71,68 +67,9 @@ def init_hailo():
         traceback.print_exc()
         return None, None
 
-def preprocess_frame(frame, input_shape=(640, 640)):
-    """Preprocess frame for YOLOv5 inference"""
-    # Resize to model input size
-    resized = cv2.resize(frame, input_shape)
-    # Convert to RGB
-    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-    # Normalize and transpose
-    normalized = rgb.astype(np.float32) / 255.0
-    transposed = np.transpose(normalized, (2, 0, 1))  # Convert to CHW format
-    # Add batch dimension
-    batched = np.expand_dims(transposed, axis=0)
-    print(f"Preprocessed frame shape: {batched.shape}")
-    return batched
 
-def postprocess(outputs, input_shape=(640, 640)):
-    """Postprocess YOLOv5 outputs"""
-    detections = []
-    try:
-        # Get output tensor
-        output_name = list(outputs.keys())[0]
-        output_tensor = outputs[output_name]
-
-        # Decode YOLO outputs (simplified example)
-        for det in output_tensor[0]:  # Iterate over detections
-            conf = det[4]
-            if conf > 0.5:  # Confidence threshold
-                x, y, w, h = det[:4]
-                x1 = int((x - w / 2) * input_shape[1])
-                y1 = int((y - h / 2) * input_shape[0])
-                x2 = int((x + w / 2) * input_shape[1])
-                y2 = int((y + h / 2) * input_shape[0])
-                detections.append({'bbox': [x1, y1, x2, y2], 'confidence': conf})
-        print(f"Processed detections: {detections}")
-
-    except Exception as e:
-        print(f"Error processing outputs: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    return detections
-
-def run_inference(network_group, preprocessed_frame):
-    try:
-        # Get input stream name
-        input_name = list(network_group.input_vstream_infos.keys())[0]
-        print(f"Using input stream: {input_name}")
-        
-        # Prepare input data
-        input_data = {input_name: preprocessed_frame}
-        
-        # Create inference streams and run inference
-        with InferVStreams(network_group) as infer:
-            outputs = infer.infer(input_data)
-            print(f"Inference outputs: {list(outputs.keys())}")
-            
-        return outputs
-
-    except Exception as e:
-        print(f"Inference error: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+# Initialize Socket.IO client
+sio = socketio.Client()
 
 # Socket.IO event handlers
 @sio.event
