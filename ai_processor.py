@@ -2,41 +2,37 @@ import cv2
 import numpy as np
 import socketio
 import base64
-import hailo_platform.pyhailort as pyhailort
-
+from hailo_platform.pyhailort.pyhailort import Device, HailoRTException
 
 # Initialize Socket.IO client
 sio = socketio.Client()
-
 
 def init_hailo():
     try:
         print("Initializing Hailo device...")
 
-        # Create VDevice using the class method
-        vdevice = pyhailort.VDevice.create()
+        # Create Device (not VDevice)
+        device = Device()
+        print("Device created successfully")
 
-        # Path to your HEF file
-        hef_path = '/home/johannes/hailo_models/yolov5_person.hef'
-
-        # Load the HEF file
-        hef = pyhailort.Hef(hef_path)
+        # Path to your HEF file - using one from the installed package
+        hef_path = '/home/johannes/tauben/venv/lib/python3.9/site-packages/hailo_tutorials/hefs/resnet_v1_18.hef'
+        print(f"Loading HEF file from: {hef_path}")
 
         # Configure the device with the HEF
-        network_groups = vdevice.configure(hef)
-        network_group = network_groups[0]  # Use the first network group
+        network_group = device.configure(hef_path)
+        print("Network configured")
 
-        print("Hailo device initialized successfully")
-        return vdevice, network_group
-    except pyhailort.HailoRTException as e:
+        return device, network_group
+    except HailoRTException as e:
         print(f"Failed to initialize Hailo device: {e}")
         return None, None
     except Exception as e:
         print(f"Unexpected error during Hailo initialization: {e}")
         return None, None
 
-
 # Initialize Hailo device
+print("Starting Hailo initialization...")
 device, network_group = init_hailo()
 
 @sio.event
@@ -77,7 +73,7 @@ def on_video_frame(frame_data):
 def preprocess_frame(frame):
     """Preprocess frame for Hailo inference"""
     # Resize to model input size (adjust as needed)
-    resized = cv2.resize(frame, (640, 640))
+    resized = cv2.resize(frame, (224, 224))  # ResNet input size
     # Convert to RGB
     rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
     # Normalize
@@ -89,11 +85,12 @@ def preprocess_frame(frame):
 def run_inference(preprocessed_frame):
     """Run inference on Hailo device"""
     try:
-        # Prepare input
+        # Create input tensors - adjust name based on model
         input_data = {'input': preprocessed_frame}
         
         # Run inference
         outputs = network_group.infer(input_data)
+        print(f"Inference outputs: {outputs.keys()}")  # Debug print
         
         # Process outputs
         detections = process_outputs(outputs)
@@ -108,19 +105,18 @@ def process_outputs(outputs):
     detections = []
     
     try:
-        # Get outputs (adjust keys based on your model)
-        boxes = outputs.get('boxes', [])
-        scores = outputs.get('scores', [])
-        classes = outputs.get('classes', [])
-
-        # Filter detections
-        confidence_threshold = 0.5
-        for i in range(len(scores)):
-            if scores[i] > confidence_threshold:
+        # For ResNet, output is typically classification scores
+        scores = outputs.get('output', [])
+        
+        # Get top prediction
+        if len(scores) > 0:
+            max_score_idx = np.argmax(scores)
+            max_score = float(scores[max_score_idx])
+            
+            if max_score > 0.5:  # Confidence threshold
                 detection = {
-                    'box': boxes[i].tolist(),
-                    'score': float(scores[i]),
-                    'class': int(classes[i])
+                    'class': int(max_score_idx),
+                    'score': max_score
                 }
                 detections.append(detection)
 
