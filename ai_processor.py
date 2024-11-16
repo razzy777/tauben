@@ -38,11 +38,12 @@ def init_hailo():
         print(f"Network groups found: {network_group_names}")
 
         # Create configure params using Hef.create_configure_params
-        configure_params_dict = hef.create_configure_params(vdevice)
-        print("Configure params dictionary created")
+        # Create configure params using ConfigureParams.create_from_hef
+        configure_params_list = ConfigureParams.create_from_hef(hef, vdevice)
+        print("Configure params list created")
 
         # Configure the device with the HEF
-        network_groups = vdevice.configure(hef, configure_params_dict)
+        network_groups = vdevice.configure(hef, configure_params_list)
         network_group = network_groups[0]  # Get first network group
         print("Network configured successfully")
 
