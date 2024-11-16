@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import socketio
 import base64
-from hailo_platform.pyhailort.pyhailort import VDevice, HailoRTException
+from hailo_platform.pyhailort.pyhailort import VDevice, HailoRTException, Device
 
 # Initialize Socket.IO client
 sio = socketio.Client()
@@ -11,22 +11,26 @@ def init_hailo():
     try:
         print("Initializing Hailo device...")
 
-        # Create VDevice
-        vdevice = VDevice.create()
+        # Create Device first
+        device = Device()
+        print("Device created successfully")
+
+        # Create VDevice from Device
+        vdevice = VDevice(device)
         print("VDevice created successfully")
 
         # Path to your HEF file
         hef_path = '/home/johannes/tauben/venv/lib/python3.9/site-packages/hailo_tutorials/hefs/resnet_v1_18.hef'
         print(f"Loading HEF file from: {hef_path}")
 
-        # Configure the device directly with the HEF file
-        network_groups = vdevice.configure_from_hef_file(hef_path)
+        # Configure the device with the HEF file
+        network_groups = vdevice.configure_from_file(hef_path)
         network_group = network_groups[0]  # Get first network group
         print("Network configured")
 
         # Get input and output information
-        input_vstreams_info = network_group.get_input_vstream_infos()
-        output_vstreams_info = network_group.get_output_vstream_infos()
+        input_vstreams_info = network_group.input_vstream_infos
+        output_vstreams_info = network_group.output_vstream_infos
         print("Input VStreams:", input_vstreams_info)
         print("Output VStreams:", output_vstreams_info)
 
@@ -96,17 +100,16 @@ def preprocess_frame(frame):
 def run_inference(preprocessed_frame):
     """Run inference on Hailo device"""
     try:
-        # Get input vstream info
-        input_vstreams = network_group.get_input_vstream_infos()
-        input_name = list(input_vstreams.keys())[0]
+        # Get input name from input vstream info
+        input_name = list(network_group.input_vstream_infos.keys())[0]
         
         # Create input data dictionary
         input_data = {input_name: preprocessed_frame}
         
-        # Run inference
+        # Create VStreams context and run inference
         with network_group.create_vstreams() as vstreams:
             outputs = vstreams.infer(input_data)
-            print(f"Inference outputs: {outputs.keys()}")  # Debug print
+            print(f"Inference outputs: {outputs.keys()}")
         
         # Process outputs
         detections = process_outputs(outputs)
@@ -152,8 +155,14 @@ def main():
             print("Failed to initialize Hailo device. Exiting...")
             return
 
+        # Print device information
+        print("\nDevice Information:")
+        print("-------------------")
+        print(f"Input VStreams: {network_group.input_vstream_infos}")
+        print(f"Output VStreams: {network_group.output_vstream_infos}")
+
         # Connect to the Node.js server
-        print("Connecting to server...")
+        print("\nConnecting to server...")
         sio.connect('http://localhost:3000')
         print("Connected successfully")
         
