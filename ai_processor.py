@@ -228,17 +228,21 @@ def init_hailo():
         return None, None, None
 
 # Initialize Socket.IO client
-sio = socketio.Client()
+sio = socketio.Client(
+    logger=True,
+    engineio_logger=True
+)
 
-@sio.event
+
+@sio.event(namespace='/ai')
 def connect():
-    print('Connected to server')
+    print('Connected to AI namespace')
 
-@sio.event
+@sio.event(namespace='/ai')
 def disconnect():
-    print('Disconnected from server')
+    print('Disconnected from AI namespace')
 
-@sio.on('videoFrame')
+@sio.on('videoFrame', namespace='/ai')
 def on_video_frame(frame_data):
     try:
         # Decode base64 frame
@@ -257,20 +261,56 @@ def on_video_frame(frame_data):
         preprocessed_frame = preprocess_frame(frame, input_shape)
         
         # Put frame in input queue
-        # Send both original and preprocessed frames since send_original_frame=True
         input_queue.put(([frame], [preprocessed_frame]))
         
         # Get results from output queue
         original_frame, outputs = output_queue.get()
         
         if outputs:
-            print(f"Got inference results")
-            # TODO: Process detections here
+            print("Processing detection results...")
+            # Convert outputs to detections format expected by the server
+            detections = process_detections(outputs, frame.shape)
+            if detections:
+                # Emit detections to server
+                sio.emit('aiDetections', detections, namespace='/ai')
             
     except Exception as e:
         print(f"Error processing frame: {e}")
         import traceback
         traceback.print_exc()
+
+def process_detections(outputs, frame_shape):
+    """
+    Process YOLOv5 outputs into a format expected by the server.
+    Returns a list of detections with normalized coordinates.
+    """
+    height, width = frame_shape[:2]
+    detections = []
+    
+    # If outputs is a dictionary (multiple output tensors)
+    if isinstance(outputs, dict):
+        # Process YOLOv5 output format
+        # This needs to be adjusted based on your model's specific output format
+        for output_tensor in outputs.values():
+            # Each detection should be: [x1, y1, x2, y2, conf, class_id]
+            for detection in output_tensor:
+                if len(detection) >= 6:  # Make sure we have enough elements
+                    confidence = float(detection[4])
+                    if confidence > 0.5:  # Confidence threshold
+                        # Normalize coordinates to 0-1 range
+                        x1 = float(detection[0]) / width
+                        y1 = float(detection[1]) / height
+                        x2 = float(detection[2]) / width
+                        y2 = float(detection[3]) / height
+                        class_id = int(detection[5])
+                        
+                        detections.append({
+                            'box': [y1, x1, y2, x2],  # Format expected by server
+                            'confidence': confidence,
+                            'class_id': class_id
+                        })
+    
+    return detections
 
 def main():
     try:
@@ -282,9 +322,14 @@ def main():
             print("Failed to initialize Hailo device. Exiting...")
             return
 
-        # Connect to the Node.js server
+        # Connect to the Node.js server's AI namespace
         print("\nConnecting to server...")
-        sio.connect('http://localhost:3000')
+        sio.connect(
+            'http://localhost:3000',
+            namespaces=['/ai'],
+            wait_timeout=10,
+            transports=['websocket', 'polling']
+        )
         print("Connected successfully")
         
         # Start inference thread
