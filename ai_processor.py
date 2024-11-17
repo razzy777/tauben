@@ -57,9 +57,7 @@ class HailoAsyncInference:
                 getattr(FormatType, output_type)
             )
 
-    def callback(
-        self, completion_info, bindings_list: list, input_batch: list,
-    ) -> None:
+    def callback(self, completion_info, bindings_list: list, input_batch: list) -> None:
         if completion_info.exception:
             print(f'Inference error: {completion_info.exception}')
         else:
@@ -69,8 +67,9 @@ class HailoAsyncInference:
                     for name in bindings._output_names:
                         output_buffer = bindings.output(name).get_buffer()
                         if isinstance(output_buffer, list):
-                            # Concatenate list of arrays into a single array
                             output_buffer = np.concatenate(output_buffer, axis=0)
+                        print(f"Output '{name}' buffer shape: {output_buffer.shape}, dtype: {output_buffer.dtype}")
+                        print(f"Output '{name}' data (sample): {output_buffer.ravel()[:10]}")  # First 10 values
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
@@ -341,7 +340,7 @@ def main():
     @sio.event(namespace='/ai')
     def disconnect():
         print('Disconnected from AI namespace')
-
+    
     @sio.on('videoFrame', namespace='/ai')
     def on_video_frame(frame_data):
         try:
@@ -354,11 +353,14 @@ def main():
                 print("Error: Could not decode frame")
                 return
 
+            # Save the received frame for inspection
+            cv2.imwrite('received_frame.jpg', frame)
+
             # Preprocess frame
             preprocessed_frame = utils.preprocess(frame, width, height)
 
             # Put frame in input queue
-            input_queue.put(( [frame], [preprocessed_frame] ))
+            input_queue.put(([frame], [preprocessed_frame]))
 
             # Get results from output queue
             original_frame, outputs = output_queue.get()
@@ -378,31 +380,13 @@ def main():
                     sio.emit('aiDetections', detections, namespace='/ai')
                 else:
                     print("No detections found.")
+            else:
+                print("No outputs from model.")
 
         except Exception as e:
             print(f"Error processing frame: {e}")
             import traceback
             traceback.print_exc()
-
-    # Connect to server
-    connection_url = 'http://localhost:3000'
-    sio.connect(
-        connection_url,
-        namespaces=['/ai'],
-        wait_timeout=10,
-        transports=['websocket', 'polling'],
-        socketio_path='/socket.io',
-    )
-
-    print("Connected successfully")
-    print("Waiting for events...")
-    sio.wait()
-
-    # Cleanup
-    input_queue.put(None)  # Signal inference thread to stop
-    inference_thread.join()
-    if sio.connected:
-        sio.disconnect()
 
 
 if __name__ == "__main__":

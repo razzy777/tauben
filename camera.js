@@ -106,13 +106,15 @@ async function startVideoStream(frontendNamespace, aiNamespace) {
 
               frontendNamespace.emit('videoFrame', frame.toString('base64'));
 
-              if (frameCount % 15 === 0) {
-                const aiClients = aiNamespace.sockets.size;
-                if (aiClients > 0) {
-                  console.log(`Sending frame to ${aiClients} AI client(s)`);
-                  aiNamespace.emit('videoFrame', frame.toString('base64'));
-                }
-              }
+			  if (frameCount % 15 === 0) {
+				const aiClients = aiNamespace.sockets.size;
+				if (aiClients > 0) {
+				  const base64Frame = frame.toString('base64');
+				  console.log(`Sending frame to ${aiClients} AI client(s), Frame Length: ${base64Frame.length}`);
+				  aiNamespace.emit('videoFrame', base64Frame);
+				}
+			  }
+			  
             } else {
               console.warn(`Received small frame (${frame.length} bytes), skipping`);
             }
