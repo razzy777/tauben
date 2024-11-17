@@ -90,19 +90,27 @@ class HailoAsyncInference:
     
     def callback(self, completion_info, bindings_list: list, input_batch: list) -> None:
         if completion_info.exception:
-            print(f'Inference error: {completion_info.exception}')
+            print(f"Inference error: {completion_info.exception}")
         else:
             for i, bindings in enumerate(bindings_list):
                 try:
                     output_data = {}
                     for name in bindings._output_names:
                         output_buffer = bindings.output(name).get_buffer()
-                        print(f"Output '{name}' buffer shape: {output_buffer.shape}, dtype: {output_buffer.dtype}")
-                        print(f"Output '{name}' data (sample): {output_buffer.ravel()[:10]}")  # Print first 10 elements
+                        if isinstance(output_buffer, list):
+                            print(f"Output '{name}' buffer is a list with {len(output_buffer)} elements.")
+                            for idx, buf in enumerate(output_buffer):
+                                print(f"Element {idx} shape: {buf.shape}, dtype: {buf.dtype}")
+                                print(f"Element {idx} data (sample): {buf.ravel()[:10]}")
+                            output_buffer = np.concatenate(output_buffer, axis=0)
+                        else:
+                            print(f"Output '{name}' buffer shape: {output_buffer.shape}, dtype: {output_buffer.dtype}")
+                            print(f"Output '{name}' data (sample): {output_buffer.ravel()[:10]}")
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
                     print(f"Error in callback processing result {i}: {e}")
+                    import traceback
                     traceback.print_exc()
     
     def _create_bindings(self, configured_infer_model):
