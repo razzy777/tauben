@@ -33,7 +33,6 @@ class HailoAsyncInference:
         self.input_queue = input_queue
         self.output_queue = output_queue
         params = VDevice.create_params()
-        # Set the scheduling algorithm to round-robin to activate the scheduler
         params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
 
         self.hef = HEF(hef_path)
@@ -47,6 +46,7 @@ class HailoAsyncInference:
 
         self.output_type = output_type
         self.send_original_frame = send_original_frame
+        print(f"Initialized HailoAsyncInference with input shape: {self.get_input_shape()}")
 
     def _set_input_type(self, input_type: Optional[str] = None) -> None:
         self.infer_model.input().set_format_type(getattr(FormatType, input_type))
@@ -57,9 +57,7 @@ class HailoAsyncInference:
                 getattr(FormatType, output_type)
             )
 
-    def callback(
-        self, completion_info, bindings_list: list, input_batch: list,
-    ) -> None:
+    def callback(self, completion_info, bindings_list: list, input_batch: list) -> None:
         if completion_info.exception:
             print(f'Inference error: {completion_info.exception}')
         else:
@@ -69,7 +67,6 @@ class HailoAsyncInference:
                     for name in bindings._output_names:
                         output_buffer = bindings.output(name).get_buffer()
                         if isinstance(output_buffer, list):
-                            # Concatenate list of arrays into a single array
                             output_buffer = np.concatenate(output_buffer, axis=0)
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
@@ -78,58 +75,63 @@ class HailoAsyncInference:
                     import traceback
                     traceback.print_exc()
 
-    def get_vstream_info(self) -> Tuple[list, list]:
-        return (
-            self.hef.get_input_vstream_infos(),
-            self.hef.get_output_vstream_infos()
-        )
-
-    def get_hef(self) -> HEF:
-        return self.hef
-
     def get_input_shape(self) -> Tuple[int, ...]:
-        return self.hef.get_input_vstream_infos()[0].shape  # Assumes one input
+        return self.hef.get_input_vstream_infos()[0].shape
 
     def run(self) -> None:
-        with self.infer_model.configure() as configured_infer_model:
-            while True:
-                batch_data = self.input_queue.get()
-                if batch_data is None:
-                    break  # Sentinel value to stop the inference loop
+        try:
+            with self.infer_model.configure() as configured_infer_model:
+                while True:
+                    try:
+                        batch_data = self.input_queue.get()
+                        if batch_data is None:
+                            break  # Sentinel value to stop the inference loop
 
-                if self.send_original_frame:
-                    original_batch, preprocessed_batch = batch_data
-                else:
-                    preprocessed_batch = batch_data
+                        if self.send_original_frame:
+                            original_batch, preprocessed_batch = batch_data
+                        else:
+                            preprocessed_batch = batch_data
 
-                bindings_list = []
-                for frame in preprocessed_batch:
-                    bindings = self._create_bindings(configured_infer_model)
-                    bindings.input().set_buffer(np.array(frame))
-                    bindings_list.append(bindings)
+                        bindings_list = []
+                        for frame in preprocessed_batch:
+                            # Ensure frame is C_CONTIGUOUS
+                            frame_contiguous = np.ascontiguousarray(frame, dtype=np.float32)
+                            
+                            # Create bindings and set buffer
+                            bindings = self._create_bindings(configured_infer_model)
+                            bindings.input().set_buffer(frame_contiguous)
+                            bindings_list.append(bindings)
 
-                configured_infer_model.wait_for_async_ready(timeout_ms=10000)
-                job = configured_infer_model.run_async(
-                    bindings_list, partial(
-                        self.callback,
-                        input_batch=original_batch if self.send_original_frame else preprocessed_batch,
-                        bindings_list=bindings_list
-                    )
-                )
-            job.wait(10000)  # Wait for the last job
+                        configured_infer_model.wait_for_async_ready(timeout_ms=10000)
+                        job = configured_infer_model.run_async(
+                            bindings_list, partial(
+                                self.callback,
+                                input_batch=original_batch if self.send_original_frame else preprocessed_batch,
+                                bindings_list=bindings_list
+                            )
+                        )
+                    except Exception as e:
+                        print(f"Error processing batch: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
 
-    def _get_output_type_str(self, output_info) -> str:
-        if self.output_type is None:
-            return str(output_info.format.type).split(".")[1].lower()
-        else:
-            return self.output_type[output_info.name].lower()
+                if 'job' in locals():
+                    job.wait(10000)  # Wait for the last job
+                    
+        except Exception as e:
+            print(f"Fatal error in inference loop: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def _create_bindings(self, configured_infer_model) -> object:
         if self.output_type is None:
             output_buffers = {
                 output_info.name: np.empty(
                     self.infer_model.output(output_info.name).shape,
-                    dtype=(getattr(np, self._get_output_type_str(output_info)))
+                    dtype=np.float32,
+                    order='C'  # Ensure C-contiguous output buffers
                 )
                 for output_info in self.hef.get_output_vstream_infos()
             }
@@ -137,13 +139,12 @@ class HailoAsyncInference:
             output_buffers = {
                 name: np.empty(
                     self.infer_model.output(name).shape,
-                    dtype=(getattr(np, self.output_type[name].lower()))
+                    dtype=getattr(np, self.output_type[name].lower()),
+                    order='C'  # Ensure C-contiguous output buffers
                 )
                 for name in self.output_type
             }
-        return configured_infer_model.create_bindings(
-            output_buffers=output_buffers
-        )
+        return configured_infer_model.create_bindings(output_buffers=output_buffers)
 
 
 def generate_color(class_id: int) -> tuple:
@@ -162,18 +163,19 @@ class ObjectDetectionUtils:
             class_names = f.read().splitlines()
         return class_names
 
-    def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
-        """
-        Preprocess the image for inference.
+def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
+    """
+    Preprocess the image for inference.
 
-        Args:
-            image (np.ndarray): Input image in BGR format.
-            model_w (int): Model input width.
-            model_h (int): Model input height.
+    Args:
+        image (np.ndarray): Input image in BGR format.
+        model_w (int): Model input width.
+        model_h (int): Model input height.
 
-        Returns:
-            np.ndarray: Preprocessed image.
-        """
+    Returns:
+        np.ndarray: Preprocessed image.
+    """
+    try:
         # Resize with aspect ratio maintained
         img_h, img_w = image.shape[:2]
         scale = min(model_w / img_w, model_h / img_h)
@@ -188,20 +190,29 @@ class ObjectDetectionUtils:
 
         # Apply padding
         padded_image = cv2.copyMakeBorder(
-            resized_image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=self.padding_color
+            resized_image, top, bottom, left, right, cv2.BORDER_CONSTANT, 
+            value=self.padding_color
         )
 
         # Convert BGR to RGB
         padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
 
-        # Normalize to [0, 1]
+        # Normalize to [0, 1] and ensure float32
         padded_image = padded_image.astype(np.float32) / 255.0
 
-        # Transpose to CHW format
-        padded_image = np.transpose(padded_image, (2, 0, 1))
+        # Transpose to CHW format and ensure C-contiguous
+        padded_image = np.ascontiguousarray(
+            np.transpose(padded_image, (2, 0, 1)),
+            dtype=np.float32
+        )
 
         return padded_image
 
+    except Exception as e:
+        print(f"Error in preprocessing: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
     def draw_detection(self, image: Image.Image, box: list, cls: int, score: float, color: tuple):
         draw = ImageDraw.Draw(image)
         label = f"{self.labels[cls]}: {score:.2f}%"
