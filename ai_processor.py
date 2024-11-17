@@ -122,10 +122,10 @@ class ObjectDetectionUtils:
         self.padding_color = padding_color
         # Find person class index
         try:
-            self.person_class = self.labels.index('person')
-            print(f"Person class index: {self.person_class}")
+            self.apple_class = self.labels.index('apple')
+            print(f"Person class index: {self.apple_class}")
         except ValueError:
-            self.person_class = 0  # Default to 0 if not found
+            self.apple_class = 0  # Default to 0 if not found
             print("Warning: 'person' not found in labels, using class index 0")
         self.confidence_threshold = 0.90  # Adjust as needed
 
@@ -211,7 +211,7 @@ class ObjectDetectionUtils:
                     if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
                         boxes.append([y1_px, x1_px, y2_px, x2_px])
                         scores.append(float(confidence))
-                        classes.append(self.person_class)
+                        classes.append(self.apple_class)
 
             num_detections = len(scores)
 
@@ -260,7 +260,7 @@ class ObjectDetectionUtils:
                         float(ymax) / h,
                         float(xmax) / w
                     ],
-                    'class': 'person',  # Always person
+                    'class': 'apple',  # Always person
                     'score': float(confidence)
                 }
                 formatted.append(formatted_detection)
