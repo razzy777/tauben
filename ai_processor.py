@@ -279,7 +279,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-n", "--net",
         help="Path for the network in HEF format.",
-        default="/Downloads/yolov8n.hef"
+        default="/home/johannes/Downloads/yolov8n.hef"
     )
     parser.add_argument(
         "-l", "--labels",
