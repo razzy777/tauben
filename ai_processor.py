@@ -97,14 +97,21 @@ class HailoAsyncInference:
                         output_buffer = bindings.output(name).get_buffer()
                         if isinstance(output_buffer, list):
                             output_buffer = np.concatenate(output_buffer, axis=0)
-                        print(f"Output '{name}' shape: {output_buffer.shape}")
-                        print(f"Output '{name}' range: [{output_buffer.min()}, {output_buffer.max()}]")
+                        
+                        # Skip printing range for empty arrays
+                        if output_buffer.size > 0:
+                            print(f"Output '{name}' shape: {output_buffer.shape}")
+                            print(f"Output '{name}' range: [{output_buffer.min()}, {output_buffer.max()}]")
+                        else:
+                            print(f"Output '{name}' is empty with shape: {output_buffer.shape}")
+                            
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
                     print(f"Error in callback processing result {i}: {e}")
                     import traceback
                     traceback.print_exc()
+
 
     def get_input_shape(self) -> Tuple[int, ...]:
         return self.hef.get_input_vstream_infos()[0].shape
@@ -259,39 +266,57 @@ class ObjectDetectionUtils:
             classes = []
             num_detections = 0
 
-            output_tensor = input_data[next(iter(input_data))]
-            print(f"\nProcessing output tensor:")
+            # Get the output tensor
+            output_name = 'yolov8n/yolov8_nms_postprocess'
+            output_tensor = input_data[output_name]
+            
+            print(f"\nAnalyzing model output:")
+            print(f"- Output name: {output_name}")
             print(f"- Shape: {output_tensor.shape}")
             print(f"- Type: {output_tensor.dtype}")
-            print(f"- Range: [{output_tensor.min()}, {output_tensor.max()}]")
-
+            
             if output_tensor.size > 0:
-                print(f"- First detection raw data: {output_tensor[0]}")
+                print(f"- Content available")
+            else:
+                print(f"- No detections in output tensor")
+                # Get model info
+                print("\nChecking model configuration:")
+                print(f"- Expected input shape: {self.model_input_shape}")
+                return {
+                    'detection_boxes': boxes,
+                    'detection_classes': classes,
+                    'detection_scores': scores,
+                    'num_detections': num_detections
+                }
 
             # Lower confidence threshold for debugging
             confidence_threshold = 0.1
 
-            # Process each detection
+            # For YOLOv8 Hailo format: [x1, y1, x2, y2, score]
             for det in output_tensor:
-                x1, y1, x2, y2, confidence, class_id = det[:6]
-                score = float(confidence)
+                score = det[4]  # Confidence score is the last element
                 
                 if score >= confidence_threshold:
-                    print(f"\nValid detection found:")
-                    print(f"- Box: ({x1:.2f}, {y1:.2f}, {x2:.2f}, {y2:.2f})")
-                    print(f"- Confidence: {score:.2f}")
-                    print(f"- Class ID: {int(class_id)}")
+                    x1, y1, x2, y2 = det[:4]
                     
-                    # Scale boxes to original image size
+                    # Debug detection
+                    print(f"\nDetection found:")
+                    print(f"- Raw coordinates: ({x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f})")
+                    print(f"- Confidence: {score:.3f}")
+                    
+                    # Scale to image coordinates
                     h, w = orig_image_shape
                     x1 = int(x1 * w)
                     y1 = int(y1 * h)
                     x2 = int(x2 * w)
                     y2 = int(y2 * h)
+                    
+                    print(f"- Scaled coordinates: ({x1}, {y1}, {x2}, {y2})")
 
+                    # Store detection
                     boxes.append([y1, x1, y2, x2])
                     scores.append(score)
-                    classes.append(int(class_id))
+                    classes.append(0)  # Assume single class for now
                     num_detections += 1
 
             result = {
@@ -302,12 +327,6 @@ class ObjectDetectionUtils:
             }
             
             print(f"\nExtracted {num_detections} detections")
-            if num_detections > 0:
-                print("First detection details:")
-                print(f"- Box: {boxes[0]}")
-                print(f"- Class: {self.labels[classes[0]]}")
-                print(f"- Score: {scores[0]:.2f}")
-            
             return result
 
         except Exception as e:
@@ -382,6 +401,24 @@ class AIProcessor:
         
         # Create debug directory
         os.makedirs('debug_frames', exist_ok=True)
+        # Print model info
+        print("\nModel Information:")
+        print(f"HEF path: {hef_path}")
+        
+        # Get model info from HEF
+        hef = HEF(hef_path)
+        input_vstream_info = hef.get_input_vstream_infos()[0]
+        output_vstream_info = hef.get_output_vstream_infos()[0]
+        
+        print("\nInput Stream Info:")
+        print(f"- Name: {input_vstream_info.name}")
+        print(f"- Shape: {input_vstream_info.shape}")
+        print(f"- Format: {input_vstream_info.format}")
+        
+        print("\nOutput Stream Info:")
+        print(f"- Name: {output_vstream_info.name}")
+        print(f"- Shape: {output_vstream_info.shape}")
+        print(f"- Format: {output_vstream_info.format}")
 
     def setup_socket_handlers(self):
         @self.sio.event(namespace='/ai')
