@@ -204,7 +204,15 @@ class ObjectDetectionUtils:
     def __init__(self, labels_path: str, padding_color: tuple = (114, 114, 114)):
         self.labels = self.get_labels(labels_path)
         self.padding_color = padding_color
-        print(f"Initialized ObjectDetectionUtils with {len(self.labels)} labels")
+        # Find person class index
+        try:
+            self.person_class = self.labels.index('person')
+            print(f"Person class index: {self.person_class}")
+        except ValueError:
+            self.person_class = 0  # Default to 0 if not found
+            print("Warning: 'person' not found in labels, using class index 0")
+        # Set higher confidence threshold
+        self.confidence_threshold = 0.45  # Increased from default
 
     def get_labels(self, labels_path: str) -> list:
         try:
@@ -261,8 +269,8 @@ class ObjectDetectionUtils:
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
-        Extract detections from model output.
-        Format appears to be (N, 5) where each row is [x1, y1, x2, y2, confidence]
+        Extract person detections from model output.
+        Format: (N, 5) where each row is [x1, y1, x2, y2, confidence]
         """
         try:
             boxes = []
@@ -273,25 +281,16 @@ class ObjectDetectionUtils:
             output_name = 'yolov8n/yolov8_nms_postprocess'
             output_tensor = input_data[output_name]
             
-            print(f"\nAnalyzing model output:")
-            print(f"- Output name: {output_name}")
-            print(f"- Shape: {output_tensor.shape}")
-            print(f"- Type: {output_tensor.dtype}")
-
             if output_tensor.size == 0:
-                print("No detections in output tensor")
                 return self._empty_detection_result()
-
-            confidence_threshold = 0.25  # Adjust as needed
 
             # Process each detection
             for detection in output_tensor:
                 x1, y1, x2, y2, confidence = detection
                 
-                if confidence >= confidence_threshold:
-                    print(f"\nDetection found:")
+                if confidence >= self.confidence_threshold:
+                    print(f"\nPotential person detection:")
                     print(f"- Confidence: {confidence:.3f}")
-                    print(f"- Normalized coordinates: ({x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f})")
                     
                     # Scale to image coordinates
                     h, w = orig_image_shape
@@ -300,12 +299,23 @@ class ObjectDetectionUtils:
                     x2_px = int(x2 * w)
                     y2_px = int(y2 * h)
                     
-                    print(f"- Pixel coordinates: ({x1_px}, {y1_px}, {x2_px}, {y2_px})")
-
-                    boxes.append([y1_px, x1_px, y2_px, x2_px])
-                    scores.append(float(confidence))
-                    classes.append(0)  # Single class for now
-                    num_detections += 1
+                    # Calculate box dimensions
+                    width = x2_px - x1_px
+                    height = y2_px - y1_px
+                    aspect_ratio = height / width if width > 0 else 0
+                    
+                    # Person detection heuristics
+                    MIN_ASPECT_RATIO = 1.2  # Persons are typically taller than wide
+                    MAX_ASPECT_RATIO = 3.0  # But not too tall
+                    
+                    if 1.2 <= aspect_ratio <= 3.0:
+                        print(f"- Valid person detection (aspect ratio: {aspect_ratio:.2f})")
+                        boxes.append([y1_px, x1_px, y2_px, x2_px])
+                        scores.append(float(confidence))
+                        classes.append(self.person_class)
+                        num_detections += 1
+                    else:
+                        print(f"- Skipped: Invalid aspect ratio ({aspect_ratio:.2f})")
 
             result = {
                 'detection_boxes': boxes,
@@ -314,7 +324,11 @@ class ObjectDetectionUtils:
                 'num_detections': num_detections
             }
             
-            print(f"\nExtracted {num_detections} detections")
+            if num_detections > 0:
+                print(f"\nExtracted {num_detections} person detections:")
+                for i in range(num_detections):
+                    print(f"Person {i+1}: confidence = {scores[i]:.3f}")
+            
             return result
 
         except Exception as e:
@@ -333,32 +347,25 @@ class ObjectDetectionUtils:
         }
 
     def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
-        """Format detections for frontend display."""
+        """Format person detections for frontend display."""
         try:
             formatted = []
             h, w = image_shape[:2]
             
             for i in range(detections['num_detections']):
                 ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
-                
-                # Debug original values
-                print(f"\nFormatting detection {i}:")
-                print(f"- Original box: [{ymin}, {xmin}, {ymax}, {xmax}]")
-                print(f"- Score: {detections['detection_scores'][i]:.3f}")
+                confidence = detections['detection_scores'][i]
                 
                 formatted_detection = {
                     'box': [
-                        float(ymin) / h,  # normalized ymin
-                        float(xmin) / w,  # normalized xmin
-                        float(ymax) / h,  # normalized ymax
-                        float(xmax) / w   # normalized xmax
+                        float(ymin) / h,
+                        float(xmin) / w,
+                        float(ymax) / h,
+                        float(xmax) / w
                     ],
-                    'class': str(detections['detection_classes'][i]),  # Convert to string
-                    'score': float(detections['detection_scores'][i])
+                    'class': 'person',  # Always person
+                    'score': float(confidence)
                 }
-                
-                # Debug formatted values
-                print(f"- Formatted box: {formatted_detection['box']}")
                 formatted.append(formatted_detection)
             
             return formatted
