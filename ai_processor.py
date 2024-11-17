@@ -259,13 +259,10 @@ class ObjectDetectionUtils:
             traceback.print_exc()
             raise
 
-    def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
+        def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
         Extract detections from model output.
-        YOLOv8 Hailo format: (80, 5, 100) where:
-        - 80 is number of classes
-        - 5 is [x1, y1, x2, y2, confidence]
-        - 100 is max detections per class
+        Format appears to be (N, 5) where each row is [x1, y1, x2, y2, confidence]
         """
         try:
             boxes = []
@@ -281,49 +278,34 @@ class ObjectDetectionUtils:
             print(f"- Shape: {output_tensor.shape}")
             print(f"- Type: {output_tensor.dtype}")
 
-            # Expected shape: (80, 5, 100)
-            if len(output_tensor.shape) != 3:
-                print(f"Unexpected output shape: {output_tensor.shape}")
+            if output_tensor.size == 0:
+                print("No detections in output tensor")
                 return self._empty_detection_result()
 
-            num_classes, box_data, max_dets = output_tensor.shape
-            if box_data != 5:
-                print(f"Unexpected box data dimension: {box_data}")
-                return self._empty_detection_result()
+            confidence_threshold = 0.25  # Adjust as needed
 
-            confidence_threshold = 0.1  # Lower threshold for debugging
-
-            # Iterate through each class
-            for class_idx in range(num_classes):
-                # Get detections for this class
-                class_dets = output_tensor[class_idx]  # Shape: (5, 100)
+            # Process each detection
+            for detection in output_tensor:
+                x1, y1, x2, y2, confidence = detection
                 
-                # Iterate through detections
-                for det_idx in range(max_dets):
-                    confidence = class_dets[4, det_idx]  # Fifth element is confidence
+                if confidence >= confidence_threshold:
+                    print(f"\nDetection found:")
+                    print(f"- Confidence: {confidence:.3f}")
+                    print(f"- Normalized coordinates: ({x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f})")
                     
-                    if confidence >= confidence_threshold:
-                        # Get box coordinates
-                        x1, y1, x2, y2 = class_dets[0:4, det_idx]
-                        
-                        print(f"\nDetection found:")
-                        print(f"- Class: {class_idx} ({self.labels[class_idx]})")
-                        print(f"- Confidence: {confidence:.3f}")
-                        print(f"- Raw coordinates: ({x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f})")
-                        
-                        # Scale to image coordinates
-                        h, w = orig_image_shape
-                        x1 = int(x1 * w)
-                        y1 = int(y1 * h)
-                        x2 = int(x2 * w)
-                        y2 = int(y2 * h)
-                        
-                        print(f"- Scaled coordinates: ({x1}, {y1}, {x2}, {y2})")
+                    # Scale to image coordinates
+                    h, w = orig_image_shape
+                    x1_px = int(x1 * w)
+                    y1_px = int(y1 * h)
+                    x2_px = int(x2 * w)
+                    y2_px = int(y2 * h)
+                    
+                    print(f"- Pixel coordinates: ({x1_px}, {y1_px}, {x2_px}, {y2_px})")
 
-                        boxes.append([y1, x1, y2, x2])
-                        scores.append(float(confidence))
-                        classes.append(class_idx)
-                        num_detections += 1
+                    boxes.append([y1_px, x1_px, y2_px, x2_px])
+                    scores.append(float(confidence))
+                    classes.append(0)  # Single class for now
+                    num_detections += 1
 
             result = {
                 'detection_boxes': boxes,
@@ -341,6 +323,7 @@ class ObjectDetectionUtils:
             traceback.print_exc()
             return self._empty_detection_result()
 
+
     def _empty_detection_result(self):
         return {
             'detection_boxes': [],
@@ -351,23 +334,40 @@ class ObjectDetectionUtils:
 
     def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
         """Format detections for frontend display."""
-        formatted = []
-        h, w = image_shape[:2]
-        
-        for i in range(detections['num_detections']):
-            ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
-            formatted.append({
-                'box': [
-                    float(ymin) / h,
-                    float(xmin) / w,
-                    float(ymax) / h,
-                    float(xmax) / w
-                ],
-                'class': self.labels[detections['detection_classes'][i]],
-                'score': float(detections['detection_scores'][i])
-            })
+        try:
+            formatted = []
+            h, w = image_shape[:2]
             
-        return formatted
+            for i in range(detections['num_detections']):
+                ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
+                
+                # Debug original values
+                print(f"\nFormatting detection {i}:")
+                print(f"- Original box: [{ymin}, {xmin}, {ymax}, {xmax}]")
+                print(f"- Score: {detections['detection_scores'][i]:.3f}")
+                
+                formatted_detection = {
+                    'box': [
+                        float(ymin) / h,  # normalized ymin
+                        float(xmin) / w,  # normalized xmin
+                        float(ymax) / h,  # normalized ymax
+                        float(xmax) / w   # normalized xmax
+                    ],
+                    'class': str(detections['detection_classes'][i]),  # Convert to string
+                    'score': float(detections['detection_scores'][i])
+                }
+                
+                # Debug formatted values
+                print(f"- Formatted box: {formatted_detection['box']}")
+                formatted.append(formatted_detection)
+            
+            return formatted
+            
+        except Exception as e:
+            print(f"Error formatting detections: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
 class AIProcessor:
     def __init__(self, hef_path: str, labels_path: str, server_url: str = 'http://localhost:3000'):
@@ -444,45 +444,35 @@ class AIProcessor:
         def on_video_frame(frame_data):
             self.process_frame(frame_data)
 
-    def process_frame(self, frame_data: str):
+def process_frame(self, frame_data: str):
         try:
-            # 1. Decode and debug frame
             frame = debug_frame_processing(frame_data)
             if frame is None:
                 return
 
-            # 2. Preprocess frame
             try:
                 preprocessed_frame = self.utils.preprocess(frame, self.width, self.height)
-                print("\nPreprocessed frame stats:")
-                print(f"- Shape: {preprocessed_frame.shape}")
-                print(f"- Range: [{preprocessed_frame.min():.3f}, {preprocessed_frame.max():.3f}]")
-                print(f"- Mean: {preprocessed_frame.mean():.3f}")
             except Exception as e:
                 self.logger.error(f"Preprocessing error: {e}")
                 return
 
-            # 3. Queue frame for inference
             try:
                 self.input_queue.put(([frame], [preprocessed_frame]), block=False)
-                print("\nFrame queued for inference")
             except queue.Full:
                 self.logger.warning("Input queue full, skipping frame")
                 return
 
-            # 4. Get inference results
             try:
                 original_frame, outputs = self.output_queue.get(timeout=2.0)
-                print("\nReceived inference results:")
+                
                 for name, tensor in outputs.items():
-                    print(f"Output '{name}':")
+                    print(f"\nOutput '{name}':")
                     print(f"- Shape: {tensor.shape}")
                     print(f"- Type: {tensor.dtype}")
-                    print(f"- Range: [{tensor.min()}, {tensor.max()}]")
                     if tensor.size > 0:
+                        print(f"- Range: [{tensor.min()}, {tensor.max()}]")
                         print(f"- First row: {tensor[0]}")
 
-                # 5. Process detections
                 if outputs:
                     detections = self.utils.extract_detections(outputs, frame.shape[:2])
                     
@@ -490,12 +480,9 @@ class AIProcessor:
                         formatted_detections = self.utils.format_detections_for_frontend(
                             detections, frame.shape
                         )
-                        self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
-                        print(f"\nEmitted {len(formatted_detections)} detections to frontend")
-                    else:
-                        print("\nNo detections found")
-                else:
-                    print("\nNo outputs from model")
+                        if formatted_detections:
+                            self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
+                            print(f"\nEmitted {len(formatted_detections)} detections")
 
             except queue.Empty:
                 self.logger.warning("Inference timeout")
