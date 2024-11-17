@@ -127,7 +127,7 @@ class ObjectDetectionUtils:
         except ValueError:
             self.apple_class = 0  # Default to 0 if not found
             print("Warning: 'person' not found in labels, using class index 0")
-        self.confidence_threshold = 0.50  # Adjust as needed
+        self.confidence_threshold = 0.70  # Adjust as needed
 
     def get_labels(self, labels_path: str) -> list:
         try:
