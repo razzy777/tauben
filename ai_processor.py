@@ -61,21 +61,79 @@ class HailoAsyncInference:
         self.target = VDevice(params)
         self.infer_model = self.target.create_infer_model(hef_path)
         self.infer_model.set_batch_size(batch_size)
+
+        # Always set input to UINT8 first, then convert
+        self.infer_model.input().set_format_type(FormatType.UINT8)
         
-        if input_type is not None:
-            self._set_input_type(input_type)
-        if output_type is not None:
-            self._set_output_type(output_type)
+        # Get input info
+        input_vstream_info = self.hef.get_input_vstream_infos()[0]
+        print(f"\nInput stream details:")
+        print(f"- Name: {input_vstream_info.name}")
+        print(f"- Shape: {input_vstream_info.shape}")
+        print(f"- Format: {input_vstream_info.format.type}")
+        print(f"- Order: {input_vstream_info.format.order}")
 
         self.output_type = output_type
         self.send_original_frame = send_original_frame
-        
-        # Print model info
-        input_shape = self.get_input_shape()
-        print(f"Initialized HailoAsyncInference:")
-        print(f"- Input shape: {input_shape}")
-        print(f"- HEF path: {hef_path}")
-        print(f"- Batch size: {batch_size}")
+
+    def preprocess_for_hailo(self, frame: np.ndarray) -> np.ndarray:
+        """Convert float32 [0,1] to uint8 [0,255]"""
+        if frame.dtype == np.float32:
+            frame = (frame * 255).astype(np.uint8)
+        return frame
+
+    def run(self) -> None:
+        try:
+            with self.infer_model.configure() as configured_infer_model:
+                while True:
+                    try:
+                        batch_data = self.input_queue.get()
+                        if batch_data is None:
+                            break
+
+                        if self.send_original_frame:
+                            original_batch, preprocessed_batch = batch_data
+                        else:
+                            preprocessed_batch = batch_data
+
+                        bindings_list = []
+                        for frame in preprocessed_batch:
+                            # Convert to uint8
+                            frame_uint8 = self.preprocess_for_hailo(frame)
+                            frame_contiguous = np.ascontiguousarray(frame_uint8)
+                            
+                            print(f"\nInput frame details:")
+                            print(f"- Shape: {frame_contiguous.shape}")
+                            print(f"- Type: {frame_contiguous.dtype}")
+                            print(f"- Range: [{frame_contiguous.min()}, {frame_contiguous.max()}]")
+                            print(f"- Is contiguous: {frame_contiguous.flags['C_CONTIGUOUS']}")
+                            
+                            bindings = self._create_bindings(configured_infer_model)
+                            bindings.input().set_buffer(frame_contiguous)
+                            bindings_list.append(bindings)
+
+                        configured_infer_model.wait_for_async_ready(timeout_ms=10000)
+                        job = configured_infer_model.run_async(
+                            bindings_list, partial(
+                                self.callback,
+                                input_batch=original_batch if self.send_original_frame else preprocessed_batch,
+                                bindings_list=bindings_list
+                            )
+                        )
+                    except Exception as e:
+                        print(f"Error processing batch: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
+
+                if 'job' in locals():
+                    job.wait(10000)
+                    
+        except Exception as e:
+            print(f"Fatal error in inference loop: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def _set_input_type(self, input_type: Optional[str] = None) -> None:
         self.infer_model.input().set_format_type(getattr(FormatType, input_type))
@@ -121,54 +179,6 @@ class HailoAsyncInference:
     def get_input_shape(self) -> Tuple[int, ...]:
         return self.hef.get_input_vstream_infos()[0].shape
 
-    def run(self) -> None:
-        try:
-            with self.infer_model.configure() as configured_infer_model:
-                while True:
-                    try:
-                        batch_data = self.input_queue.get()
-                        if batch_data is None:
-                            break
-
-                        if self.send_original_frame:
-                            original_batch, preprocessed_batch = batch_data
-                        else:
-                            preprocessed_batch = batch_data
-
-                        bindings_list = []
-                        for frame in preprocessed_batch:
-                            # Ensure frame is C_CONTIGUOUS and float32
-                            frame_contiguous = np.ascontiguousarray(frame, dtype=np.float32)
-                            print(f"Input frame shape: {frame_contiguous.shape}")
-                            print(f"Input frame range: [{frame_contiguous.min()}, {frame_contiguous.max()}]")
-                            
-                            bindings = self._create_bindings(configured_infer_model)
-                            bindings.input().set_buffer(frame_contiguous)
-                            bindings_list.append(bindings)
-
-                        configured_infer_model.wait_for_async_ready(timeout_ms=10000)
-                        job = configured_infer_model.run_async(
-                            bindings_list, partial(
-                                self.callback,
-                                input_batch=original_batch if self.send_original_frame else preprocessed_batch,
-                                bindings_list=bindings_list
-                            )
-                        )
-                    except Exception as e:
-                        print(f"Error processing batch: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        continue
-
-                if 'job' in locals():
-                    job.wait(10000)
-                    
-        except Exception as e:
-            print(f"Fatal error in inference loop: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
-
     def _create_bindings(self, configured_infer_model) -> object:
         if self.output_type is None:
             output_buffers = {
@@ -212,16 +222,12 @@ class ObjectDetectionUtils:
         try:
             print(f"\nPreprocessing steps for image shape {image.shape}:")
             
-            # Save original input
-            cv2.imwrite('debug_frames/0_original.jpg', image)
-            
             # 1. Resize with aspect ratio maintained
             img_h, img_w = image.shape[:2]
             scale = min(model_w / img_w, model_h / img_h)
             new_w, new_h = int(img_w * scale), int(img_h * scale)
             resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
             print(f"1. Resized to: {resized_image.shape}")
-            cv2.imwrite('debug_frames/1_resized.jpg', resized_image)
 
             # 2. Pad to target size
             delta_w = model_w - new_w
@@ -234,22 +240,14 @@ class ObjectDetectionUtils:
                 cv2.BORDER_CONSTANT, value=self.padding_color
             )
             print(f"2. Padded to: {padded_image.shape}")
-            cv2.imwrite('debug_frames/2_padded.jpg', padded_image)
 
-            # 3. Convert BGR to RGB
-            rgb_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
-            cv2.imwrite('debug_frames/3_rgb.jpg', cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR))
-
-            # 4. Normalize to [0, 1]
-            normalized_image = rgb_image.astype(np.float32) / 255.0
-            print(f"4. Normalized range: [{normalized_image.min()}, {normalized_image.max()}]")
-
-            # 5. Transpose to CHW format
-            chw_image = np.transpose(normalized_image, (2, 0, 1))
-            print(f"5. Transposed to CHW: {chw_image.shape}")
+            # Keep in BGR format for Hailo
+            # 3. Transpose to CHW format
+            chw_image = np.transpose(padded_image, (2, 0, 1))
+            print(f"3. Transposed to CHW: {chw_image.shape}")
 
             # Ensure C-contiguous
-            final_image = np.ascontiguousarray(chw_image, dtype=np.float32)
+            final_image = np.ascontiguousarray(chw_image)
             print(f"Final shape: {final_image.shape}, dtype: {final_image.dtype}")
             print(f"Is C-contiguous: {final_image.flags['C_CONTIGUOUS']}")
 
