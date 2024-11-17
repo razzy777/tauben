@@ -252,45 +252,54 @@ class ObjectDetectionUtils:
             raise
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
-        boxes = []
-        scores = []
-        classes = []
-        num_detections = 0
+        try:
+            boxes = []
+            scores = []
+            classes = []
+            num_detections = 0
 
-        output_name = 'yolov8n/yolov8_nms_postprocess'
-        output_tensor = input_data[output_name]
-        
-        if output_tensor.size == 0:
+            output_name = 'yolov8n/yolov8_nms_postprocess'
+            output_tensor = input_data[output_name]
+
+            if output_tensor.size == 0:
+                return self._empty_detection_result()
+
+            for detection in output_tensor:
+                x1, y1, x2, y2, confidence = detection
+
+                if confidence >= self.confidence_threshold:
+                    h, w = orig_image_shape
+                    x1_px = int(x1 * w)
+                    y1_px = int(y1 * h)
+                    x2_px = int(x2 * w)
+                    y2_px = int(y2 * h)
+
+                    width = x2_px - x1_px
+                    height = y2_px - y1_px
+                    aspect_ratio = height / width if width > 0 else 0
+
+                    MIN_ASPECT_RATIO = 0.5
+                    MAX_ASPECT_RATIO = 3.0
+
+                    if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
+                        boxes.append([y1_px, x1_px, y2_px, x2_px])
+                        scores.append(float(confidence))
+                        classes.append(self.person_class)
+                        num_detections += 1
+
+            result = {
+                'detection_boxes': boxes,
+                'detection_classes': classes,
+                'detection_scores': scores,
+                'num_detections': num_detections
+            }
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error extracting detections: {e}")
+            import traceback
+            traceback.print_exc()
             return self._empty_detection_result()
-
-        for detection in output_tensor:
-            x1, y1, x2, y2, confidence = detection
-            if confidence >= self.confidence_threshold:
-                h, w = orig_image_shape
-                x1_px = int(x1 * w)
-                y1_px = int(y1 * h)
-                x2_px = int(x2 * w)
-                y2_px = int(y2 * h)
-                width = x2_px - x1_px
-                height = y2_px - y1_px
-                aspect_ratio = height / width if width > 0 else 0
-
-                MIN_ASPECT_RATIO = 0.5
-                MAX_ASPECT_RATIO = 3.0
-
-                if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
-                    boxes.append([y1_px, x1_px, y2_px, x2_px])
-                    scores.append(float(confidence))
-                    classes.append(self.person_class)
-                    num_detections += 1
-
-        result = {
-            'detection_boxes': boxes,
-            'detection_classes': classes,
-            'detection_scores': scores,
-            'num_detections': num_detections
-        }
-        return result
 
 
     def _empty_detection_result(self):
@@ -393,6 +402,23 @@ class AIProcessor:
         print(f"- Shape: {output_vstream_info.shape}")
         print(f"- Format: {output_vstream_info.format}")
 
+    def decode_frame(self, frame_data: str) -> Optional[np.ndarray]:
+        """Decode base64 frame data into an OpenCV image."""
+        try:
+            img_data = base64.b64decode(frame_data)
+            nparr = np.frombuffer(img_data, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is not None:
+                return frame
+            else:
+                self.logger.error("Error: Frame decoding failed")
+                return None
+        except Exception as e:
+            self.logger.error(f"Frame decoding error: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def setup_socket_handlers(self):
         @self.sio.event(namespace='/ai')
         def connect():
@@ -413,11 +439,12 @@ class AIProcessor:
             current_time = time.time()
             if current_time - self.last_update_time < 1:  # Update at most once per second
                 return
-            self.last_update_time = current_time
 
             frame = self.decode_frame(frame_data)
             if frame is None:
                 return
+
+            self.last_update_time = current_time  # Move this line after decoding the frame
 
             preprocessed_frame = self.utils.preprocess(frame, self.width, self.height)
             self.input_queue.put(([frame], [preprocessed_frame]), block=False)
@@ -438,8 +465,10 @@ class AIProcessor:
                                 f"Detection: class={det['class']}, score={det['score']:.2f}, box={box}"
                             )
                         self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
+                else:
+                    self.logger.info("No detections in this frame.")
             else:
-                self.logger.info("No detections in this frame.")
+                self.logger.info("No outputs received from the inference model.")
 
         except queue.Empty:
             self.logger.warning("Inference timeout.")
