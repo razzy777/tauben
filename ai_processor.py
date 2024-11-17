@@ -105,7 +105,8 @@ class HailoAsyncInference:
                 bindings_list = []
                 for frame in preprocessed_batch:
                     bindings = self._create_bindings(configured_infer_model)
-                    bindings.input().set_buffer(np.array(frame))
+                    # Ensure the buffer is C_CONTIGUOUS
+                    bindings.input().set_buffer(np.ascontiguousarray(frame))
                     bindings_list.append(bindings)
 
                 configured_infer_model.wait_for_async_ready(timeout_ms=10000)
