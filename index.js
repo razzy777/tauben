@@ -73,7 +73,7 @@ function adjustServosToFollow(boundingBox) {
   const { panDelta, tiltDelta } = mapBoundingBoxToServoDelta(centerX, centerY);
 
   // Move servos relatively
-  servoSystem.moveToPositionRelative(panDelta, tiltDelta);
+ //servoSystem.moveToPositionRelative(panDelta, tiltDelta);
   
 }
 

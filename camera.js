@@ -110,7 +110,7 @@ async function startVideoStream(frontendNamespace, aiNamespace) {
 				const aiClients = aiNamespace.sockets.size;
 				if (aiClients > 0) {
 				  const base64Frame = frame.toString('base64');
-				  console.log(`Sending frame to ${aiClients} AI client(s), Frame Length: ${base64Frame.length}`);
+				  //console.log(`Sending frame to ${aiClients} AI client(s), Frame Length: ${base64Frame.length}`);
 				  aiNamespace.emit('videoFrame', base64Frame);
 				}
 			  //}
