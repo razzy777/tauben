@@ -58,9 +58,16 @@ async function initializeSystem() {
 
 // Adjust servos to follow detected person
 function adjustServosToFollow(boundingBox) {
+    //box=[0.703125, 0.3421875, 0.75, 0.390625]
+    // float(ymin) / h,
+    // float(xmin) / w,
+    // float(ymax) / h,
+    // float(xmax) / w
   const [ymin, xmin, ymax, xmax] = boundingBox;
   const centerX = (xmin + xmax) / 2;
   const centerY = (ymin + ymax) / 2;
+    console.log('CENTER X', centerX)
+    console.log('CENTER Y', centerY)
 
   // Map centerX and centerY to servo pulse deltas
   const { panDelta, tiltDelta } = mapBoundingBoxToServoDelta(centerX, centerY);
@@ -259,6 +266,7 @@ aiNamespace.on('connection', (socket) => {
     // Implement logic to move servos based on detections
     if (detections && detections.length > 0) {
       const personDetection = detections[0];  // Using the first detected person
+     //box=[0.703125, 0.3421875, 0.75, 0.390625]
       adjustServosToFollow(personDetection.box);
     }
   });
