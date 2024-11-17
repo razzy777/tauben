@@ -98,13 +98,18 @@ class HailoAsyncInference:
                         if isinstance(output_buffer, list):
                             output_buffer = np.concatenate(output_buffer, axis=0)
                         
-                        # Skip printing range for empty arrays
-                        if output_buffer.size > 0:
-                            print(f"Output '{name}' shape: {output_buffer.shape}")
-                            print(f"Output '{name}' range: [{output_buffer.min()}, {output_buffer.max()}]")
-                        else:
-                            print(f"Output '{name}' is empty with shape: {output_buffer.shape}")
-                            
+                        print(f"\nOutput '{name}':")
+                        print(f"- Original shape: {output_buffer.shape}")
+                        
+                        # Reshape if necessary
+                        if output_buffer.size > 0 and len(output_buffer.shape) == 2:
+                            # Try to reshape to (80, 5, 100)
+                            try:
+                                output_buffer = output_buffer.reshape(80, 5, 100)
+                                print(f"- Reshaped to: {output_buffer.shape}")
+                            except Exception as e:
+                                print(f"- Reshape failed: {e}")
+                        
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
@@ -256,9 +261,14 @@ class ObjectDetectionUtils:
             traceback.print_exc()
             raise
 
+class ObjectDetectionUtils:
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
         Extract detections from model output.
+        YOLOv8 Hailo format: (80, 5, 100) where:
+        - 80 is number of classes
+        - 5 is [x1, y1, x2, y2, confidence]
+        - 100 is max detections per class
         """
         try:
             boxes = []
@@ -266,7 +276,6 @@ class ObjectDetectionUtils:
             classes = []
             num_detections = 0
 
-            # Get the output tensor
             output_name = 'yolov8n/yolov8_nms_postprocess'
             output_tensor = input_data[output_name]
             
@@ -274,50 +283,50 @@ class ObjectDetectionUtils:
             print(f"- Output name: {output_name}")
             print(f"- Shape: {output_tensor.shape}")
             print(f"- Type: {output_tensor.dtype}")
-            
-            if output_tensor.size > 0:
-                print(f"- Content available")
-            else:
-                print(f"- No detections in output tensor")
-                # Get model info
-                print("\nChecking model configuration:")
-                print(f"- Expected input shape: {self.model_input_shape}")
-                return {
-                    'detection_boxes': boxes,
-                    'detection_classes': classes,
-                    'detection_scores': scores,
-                    'num_detections': num_detections
-                }
 
-            # Lower confidence threshold for debugging
-            confidence_threshold = 0.1
+            # Expected shape: (80, 5, 100)
+            if len(output_tensor.shape) != 3:
+                print(f"Unexpected output shape: {output_tensor.shape}")
+                return self._empty_detection_result()
 
-            # For YOLOv8 Hailo format: [x1, y1, x2, y2, score]
-            for det in output_tensor:
-                score = det[4]  # Confidence score is the last element
+            num_classes, box_data, max_dets = output_tensor.shape
+            if box_data != 5:
+                print(f"Unexpected box data dimension: {box_data}")
+                return self._empty_detection_result()
+
+            confidence_threshold = 0.1  # Lower threshold for debugging
+
+            # Iterate through each class
+            for class_idx in range(num_classes):
+                # Get detections for this class
+                class_dets = output_tensor[class_idx]  # Shape: (5, 100)
                 
-                if score >= confidence_threshold:
-                    x1, y1, x2, y2 = det[:4]
+                # Iterate through detections
+                for det_idx in range(max_dets):
+                    confidence = class_dets[4, det_idx]  # Fifth element is confidence
                     
-                    # Debug detection
-                    print(f"\nDetection found:")
-                    print(f"- Raw coordinates: ({x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f})")
-                    print(f"- Confidence: {score:.3f}")
-                    
-                    # Scale to image coordinates
-                    h, w = orig_image_shape
-                    x1 = int(x1 * w)
-                    y1 = int(y1 * h)
-                    x2 = int(x2 * w)
-                    y2 = int(y2 * h)
-                    
-                    print(f"- Scaled coordinates: ({x1}, {y1}, {x2}, {y2})")
+                    if confidence >= confidence_threshold:
+                        # Get box coordinates
+                        x1, y1, x2, y2 = class_dets[0:4, det_idx]
+                        
+                        print(f"\nDetection found:")
+                        print(f"- Class: {class_idx} ({self.labels[class_idx]})")
+                        print(f"- Confidence: {confidence:.3f}")
+                        print(f"- Raw coordinates: ({x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f})")
+                        
+                        # Scale to image coordinates
+                        h, w = orig_image_shape
+                        x1 = int(x1 * w)
+                        y1 = int(y1 * h)
+                        x2 = int(x2 * w)
+                        y2 = int(y2 * h)
+                        
+                        print(f"- Scaled coordinates: ({x1}, {y1}, {x2}, {y2})")
 
-                    # Store detection
-                    boxes.append([y1, x1, y2, x2])
-                    scores.append(score)
-                    classes.append(0)  # Assume single class for now
-                    num_detections += 1
+                        boxes.append([y1, x1, y2, x2])
+                        scores.append(float(confidence))
+                        classes.append(class_idx)
+                        num_detections += 1
 
             result = {
                 'detection_boxes': boxes,
@@ -333,12 +342,15 @@ class ObjectDetectionUtils:
             print(f"Error extracting detections: {e}")
             import traceback
             traceback.print_exc()
-            return {
-                'detection_boxes': [],
-                'detection_classes': [],
-                'detection_scores': [],
-                'num_detections': 0
-            }
+            return self._empty_detection_result()
+
+    def _empty_detection_result(self):
+        return {
+            'detection_boxes': [],
+            'detection_classes': [],
+            'detection_scores': [],
+            'num_detections': 0
+        }
 
     def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
         """Format detections for frontend display."""
