@@ -92,16 +92,12 @@ class HailoAsyncInference:
         else:
             for i, bindings in enumerate(bindings_list):
                 try:
-                    print(f"Bindings output names: {bindings._output_names}")  # Debugging output names
-                    if len(bindings._output_names) == 1:
-                        result = bindings.output(bindings._output_names[0]).get_buffer()
-                    else:
-                        result = {
-                            name: np.expand_dims(bindings.output(name).get_buffer(), axis=0)
-                            for name in bindings._output_names
-                        }
-                    print(f"Raw result type: {type(result)}, data: {result}")  # Inspect raw output
-                    self.output_queue.put((input_batch[i], result))
+                    output_data = {}
+                    for name in bindings._output_names:
+                        output_buffer = bindings.output(name).get_buffer()
+                        print(f"Output '{name}' buffer shape: {output_buffer.shape}, dtype: {output_buffer.dtype}")
+                        output_data[name] = output_buffer
+                    self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
                     print(f"Error in callback processing result {i}: {e}")
 
@@ -183,7 +179,7 @@ def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     """Preprocess frame for YOLOv5 inference."""
     target_height, target_width = target_shape[0:2]
 
-    # Resize while maintaining aspect ratio
+    # Resize with aspect ratio maintained
     height, width = frame.shape[:2]
     scale = min(target_width / width, target_height / height)
 
@@ -195,19 +191,19 @@ def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     # Convert BGR to RGB
     resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
-    # Create black image with target size
-    new_img = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+    # Pad to target size
+    delta_w = target_width - new_width
+    delta_h = target_height - new_height
+    top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+    left, right = delta_w // 2, delta_w - (delta_w // 2)
 
-    # Calculate padding
-    y_offset = (target_height - new_height) // 2
-    x_offset = (target_width - new_width) // 2
+    new_img = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[128, 128, 128])
 
-    # Place resized image in center
-    new_img[y_offset:y_offset + new_height, x_offset:x_offset + new_width] = resized
+    # Normalize if required (check if the model expects normalization)
+    # new_img = new_img / 255.0
 
-    # Transpose if model expects channels-first
-    # Uncomment the following line if your model expects NCHW format
-    # new_img = new_img.transpose((2, 0, 1))
+    # If model expects NCHW format
+    # new_img = np.transpose(new_img, (2, 0, 1))
 
     print(f"Preprocessed image shape: {new_img.shape}, dtype: {new_img.dtype}")
     return new_img
@@ -238,8 +234,8 @@ def init_hailo():
         return None, None, None
 
 sio = socketio.Client(
-    logger=True,
-    engineio_logger=True,
+    logger=False,
+    engineio_logger=False,
     reconnection=True,
     reconnection_attempts=5,
     reconnection_delay=1
@@ -296,34 +292,35 @@ def on_video_frame(frame_data):
         traceback.print_exc()
 
 def process_detections(outputs, frame_shape):
+    """
+    Process YOLOv5 outputs into detections.
+    Returns a list of detections with normalized coordinates.
+    """
     height, width = frame_shape[:2]
     detections = []
 
-    if isinstance(outputs, dict):
-        for output_name, output_tensor in outputs.items():
-            print(f"Processing output tensor: {output_name}, shape: {output_tensor.shape}, dtype: {output_tensor.dtype}")
-            # Flatten the output tensor if necessary
-            output_tensor = output_tensor.reshape(-1, output_tensor.shape[-1])
-            for detection in output_tensor:
-                print(f"Detection entry: {detection}")
-                if len(detection) >= 6:
-                    confidence = float(detection[4])
-                    print(f"Detection confidence: {confidence}")
-                    if confidence > 0.1:
-                        x1 = float(detection[0]) / width
-                        y1 = float(detection[1]) / height
-                        x2 = float(detection[2]) / width
-                        y2 = float(detection[3]) / height
-                        class_id = int(detection[5])
+    # Assuming outputs is a dictionary with output tensor(s)
+    for output_name, output_tensor in outputs.items():
+        print(f"Processing output tensor: {output_name}, shape: {output_tensor.shape}, dtype: {output_tensor.dtype}")
+        
+        # Flatten the tensor if necessary
+        output_tensor = output_tensor.reshape(-1, output_tensor.shape[-1])
+        
+        for detection in output_tensor:
+            # Adjust indices based on the output format
+            if len(detection) >= 6:
+                x_center, y_center, w, h, confidence, class_id = detection[:6]
+                if confidence > 0.1:
+                    x1 = (x_center - w / 2) / width
+                    y1 = (y_center - h / 2) / height
+                    x2 = (x_center + w / 2) / width
+                    y2 = (y_center + h / 2) / height
 
-                        detections.append({
-                            'box': [y1, x1, y2, x2],
-                            'confidence': confidence,
-                            'class_id': class_id
-                        })
-    else:
-        print("Outputs are not in the expected dictionary format.")
-
+                    detections.append({
+                        'box': [y1, x1, y2, x2],
+                        'confidence': float(confidence),
+                        'class_id': int(class_id)
+                    })
     print(f"Detections: {detections}")
     return detections
 
