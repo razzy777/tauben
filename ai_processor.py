@@ -215,7 +215,7 @@ def init_hailo():
         
         # Initialize hailo inference
         hailo_inference = HailoAsyncInference(
-            hef_path='/home/johannes/Downloads/yolov5n.hef',
+            hef_path='/home/johannes/Downloads/yolov8n.hef',
             input_queue=input_queue,
             output_queue=output_queue,
             batch_size=1,
