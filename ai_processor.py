@@ -153,137 +153,173 @@ def generate_color(class_id: int) -> tuple:
 
 
 class ObjectDetectionUtils:
-    def __init__(self, labels_path: str, padding_color: tuple = (114, 114, 114), label_font: str = "LiberationSans-Regular.ttf"):
+    def __init__(self, labels_path: str, padding_color: tuple = (114, 114, 114)):
+        """Initialize the ObjectDetectionUtils class.
+        
+        Args:
+            labels_path (str): Path to the labels file
+            padding_color (tuple): RGB color used for padding (default: (114, 114, 114))
+        """
         self.labels = self.get_labels(labels_path)
         self.padding_color = padding_color
-        self.label_font = label_font
+        print(f"Initialized ObjectDetectionUtils with {len(self.labels)} labels")
 
     def get_labels(self, labels_path: str) -> list:
-        with open(labels_path, 'r', encoding="utf-8") as f:
-            class_names = f.read().splitlines()
-        return class_names
+        """Load labels from file."""
+        try:
+            with open(labels_path, 'r', encoding="utf-8") as f:
+                class_names = f.read().splitlines()
+            return class_names
+        except Exception as e:
+            print(f"Error loading labels from {labels_path}: {e}")
+            return []
 
-def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
-    """
-    Preprocess the image for inference.
+    def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
+        """Preprocess image for inference.
+        
+        Args:
+            image (np.ndarray): Input image in BGR format
+            model_w (int): Model input width
+            model_h (int): Model input height
+            
+        Returns:
+            np.ndarray: Preprocessed image in CHW format
+        """
+        try:
+            print(f"Preprocessing image shape: {image.shape} to {model_w}x{model_h}")
+            
+            # Resize with aspect ratio maintained
+            img_h, img_w = image.shape[:2]
+            scale = min(model_w / img_w, model_h / img_h)
+            new_w, new_h = int(img_w * scale), int(img_h * scale)
+            resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
-    Args:
-        image (np.ndarray): Input image in BGR format.
-        model_w (int): Model input width.
-        model_h (int): Model input height.
+            # Pad to target size
+            delta_w = model_w - new_w
+            delta_h = model_h - new_h
+            top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+            left, right = delta_w // 2, delta_w - (delta_w // 2)
 
-    Returns:
-        np.ndarray: Preprocessed image.
-    """
-    try:
-        # Resize with aspect ratio maintained
-        img_h, img_w = image.shape[:2]
-        scale = min(model_w / img_w, model_h / img_h)
-        new_w, new_h = int(img_w * scale), int(img_h * scale)
-        resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            # Apply padding
+            padded_image = cv2.copyMakeBorder(
+                resized_image, top, bottom, left, right, 
+                cv2.BORDER_CONSTANT, value=self.padding_color
+            )
 
-        # Pad to target size
-        delta_w = model_w - new_w
-        delta_h = model_h - new_h
-        top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-        left, right = delta_w // 2, delta_w - (delta_w // 2)
+            # Convert BGR to RGB
+            padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
 
-        # Apply padding
-        padded_image = cv2.copyMakeBorder(
-            resized_image, top, bottom, left, right, cv2.BORDER_CONSTANT, 
-            value=self.padding_color
-        )
+            # Normalize to [0, 1] and ensure float32
+            padded_image = padded_image.astype(np.float32) / 255.0
 
-        # Convert BGR to RGB
-        padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
+            # Transpose to CHW format and ensure C-contiguous
+            padded_image = np.ascontiguousarray(
+                np.transpose(padded_image, (2, 0, 1)),
+                dtype=np.float32
+            )
 
-        # Normalize to [0, 1] and ensure float32
-        padded_image = padded_image.astype(np.float32) / 255.0
+            print(f"Preprocessed image shape: {padded_image.shape}")
+            return padded_image
 
-        # Transpose to CHW format and ensure C-contiguous
-        padded_image = np.ascontiguousarray(
-            np.transpose(padded_image, (2, 0, 1)),
-            dtype=np.float32
-        )
-
-        return padded_image
-
-    except Exception as e:
-        print(f"Error in preprocessing: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
-    def draw_detection(self, image: Image.Image, box: list, cls: int, score: float, color: tuple):
-        draw = ImageDraw.Draw(image)
-        label = f"{self.labels[cls]}: {score:.2f}%"
-        xmin, ymin, xmax, ymax = box
-        font = ImageFont.truetype(self.label_font, size=15)
-        draw.rectangle([(xmin, ymin), (xmax, ymax)], outline=color, width=2)
-        draw.text((xmin + 4, ymin + 4), label, fill=color, font=font)
-
-    def visualize(self, detections: dict, image: Image.Image, image_id: int, output_path: str, min_score: float = 0.25):
-        boxes = detections['detection_boxes']
-        classes = detections['detection_classes']
-        scores = detections['detection_scores']
-
-        for idx in range(detections['num_detections']):
-            if scores[idx] >= min_score:
-                color = generate_color(classes[idx])
-                box = boxes[idx]
-                self.draw_detection(image, box, classes[idx], scores[idx] * 100.0, color)
-
-        image.save(f'{output_path}/output_image{image_id}.jpg', 'JPEG')
+        except Exception as e:
+            print(f"Error in preprocessing: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
-        """
-        Extract detections from the input data.
-
+        """Extract detections from model output.
+        
         Args:
-            input_data (dict): Raw detections from the model.
-            orig_image_shape (Tuple[int, int]): Original image shape (height, width).
-
+            input_data (dict): Model output
+            orig_image_shape (tuple): Original image shape (height, width)
+            
         Returns:
-            dict: Filtered detection results.
+            dict: Processed detections
         """
-        boxes = []
-        scores = []
-        classes = []
-        num_detections = 0
+        try:
+            boxes = []
+            scores = []
+            classes = []
+            num_detections = 0
 
-        output_tensor = input_data[next(iter(input_data))]  # Get the first (and only) output tensor
-        if output_tensor.size == 0:
-            return {
+            output_tensor = input_data[next(iter(input_data))]
+            print(f"Processing output tensor shape: {output_tensor.shape}")
+
+            if output_tensor.size == 0:
+                return {
+                    'detection_boxes': boxes,
+                    'detection_classes': classes,
+                    'detection_scores': scores,
+                    'num_detections': num_detections
+                }
+
+            # Process each detection
+            for det in output_tensor:
+                x1, y1, x2, y2, confidence, class_id = det[:6]
+                score = float(confidence)
+                
+                if score >= 0.25:  # Confidence threshold
+                    # Scale boxes to original image size
+                    h, w = orig_image_shape
+                    x1 = int(x1 * w)
+                    y1 = int(y1 * h)
+                    x2 = int(x2 * w)
+                    y2 = int(y2 * h)
+
+                    boxes.append([y1, x1, y2, x2])  # Convert to [ymin, xmin, ymax, xmax]
+                    scores.append(score)
+                    classes.append(int(class_id))
+                    num_detections += 1
+
+            result = {
                 'detection_boxes': boxes,
                 'detection_classes': classes,
                 'detection_scores': scores,
                 'num_detections': num_detections
             }
+            
+            print(f"Found {num_detections} detections")
+            return result
 
-        # Assuming the output tensor is of shape [num_detections, 6]
-        # where each detection is [x1, y1, x2, y2, confidence, class_id]
-        for det in output_tensor:
-            x1, y1, x2, y2, confidence, class_id = det[:6]
-            score = float(confidence)
-            if score >= 0.1:
-                # Scale boxes to original image size
-                h, w = orig_image_shape
-                x1 = int(x1 * w)
-                y1 = int(y1 * h)
-                x2 = int(x2 * w)
-                y2 = int(y2 * h)
+        except Exception as e:
+            print(f"Error extracting detections: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'detection_boxes': [],
+                'detection_classes': [],
+                'detection_scores': [],
+                'num_detections': 0
+            }
 
-                boxes.append([x1, y1, x2, y2])
-                scores.append(score)
-                classes.append(int(class_id))
-                num_detections += 1
-
-        return {
-            'detection_boxes': boxes,
-            'detection_classes': classes,
-            'detection_scores': scores,
-            'num_detections': num_detections
-        }
-
+    def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
+        """Format detections for frontend display.
+        
+        Args:
+            detections (dict): Raw detections
+            image_shape (tuple): Image shape (height, width)
+            
+        Returns:
+            list: Formatted detections for frontend
+        """
+        formatted = []
+        h, w = image_shape[:2]
+        
+        for i in range(detections['num_detections']):
+            ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
+            formatted.append({
+                'box': [
+                    float(ymin) / h,  # normalized ymin
+                    float(xmin) / w,  # normalized xmin
+                    float(ymax) / h,  # normalized ymax
+                    float(xmax) / w   # normalized xmax
+                ],
+                'class': self.labels[detections['detection_classes'][i]],
+                'score': float(detections['detection_scores'][i])
+            })
+            
+        return formatted
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="YOLOv8 Object Detection")
@@ -352,48 +388,66 @@ def main():
     def disconnect():
         print('Disconnected from AI namespace')
 
-    @sio.on('videoFrame', namespace='/ai')
-    def on_video_frame(frame_data):
+@sio.on('videoFrame', namespace='/ai')
+def on_video_frame(frame_data):
+    try:
+        # Decode base64 frame
+        img_data = base64.b64decode(frame_data)
+        nparr = np.frombuffer(img_data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            print("Error: Could not decode frame")
+            return
+
+        print(f"Received frame shape: {frame.shape}")
+
+        # Preprocess frame
         try:
-            # Decode base64 frame
-            img_data = base64.b64decode(frame_data)
-            nparr = np.frombuffer(img_data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-            if frame is None:
-                print("Error: Could not decode frame")
-                return
-
-            # Preprocess frame
             preprocessed_frame = utils.preprocess(frame, width, height)
+            print("Frame preprocessed successfully")
+        except Exception as e:
+            print(f"Preprocessing error: {e}")
+            return
 
-            # Put frame in input queue
-            input_queue.put(( [frame], [preprocessed_frame] ))
+        # Put frame in input queue
+        try:
+            input_queue.put(([frame], [preprocessed_frame]))
+            print("Frame queued for inference")
+        except Exception as e:
+            print(f"Queue error: {e}")
+            return
 
-            # Get results from output queue
-            original_frame, outputs = output_queue.get()
+        # Get results from output queue with timeout
+        try:
+            original_frame, outputs = output_queue.get(timeout=2.0)
+            print("Got inference results")
 
             if outputs:
                 # Extract detections
                 detections = utils.extract_detections(outputs, frame.shape[:2])
 
                 if detections['num_detections'] > 0:
-                    # Convert original frame to PIL image for visualization
-                    original_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-                    # Visualize detections
-                    utils.visualize(detections, original_image, image_id=0, output_path='output_images')
-
+                    # Format detections for frontend
+                    formatted_detections = utils.format_detections_for_frontend(detections, frame.shape)
+                    
                     # Emit detections to server
-                    sio.emit('aiDetections', detections, namespace='/ai')
+                    sio.emit('aiDetections', formatted_detections, namespace='/ai')
+                    print(f"Emitted {len(formatted_detections)} detections")
                 else:
-                    print("No detections found.")
+                    print("No detections found")
+            else:
+                print("No outputs from model")
 
+        except queue.Empty:
+            print("Timeout waiting for inference results")
         except Exception as e:
-            print(f"Error processing frame: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error processing inference results: {e}")
 
+    except Exception as e:
+        print(f"Error processing frame: {e}")
+        import traceback
+        traceback.print_exc()
     # Connect to server
     connection_url = 'http://localhost:3000'
     sio.connect(
