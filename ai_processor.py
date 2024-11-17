@@ -212,7 +212,7 @@ class ObjectDetectionUtils:
             self.person_class = 0  # Default to 0 if not found
             print("Warning: 'person' not found in labels, using class index 0")
         # Set higher confidence threshold
-        self.confidence_threshold = 0.45  # Increased from default
+        self.confidence_threshold = 0.85  # Increased from default
 
     def get_labels(self, labels_path: str) -> list:
         try:
