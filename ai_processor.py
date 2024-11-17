@@ -175,30 +175,33 @@ class HailoAsyncInference:
 def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     """Preprocess frame for YOLOv5 inference."""
     target_height, target_width = target_shape[0:2]
-    
-    # Ensure frame is contiguous and in the right format
-    if not frame.flags['C_CONTIGUOUS']:
-        frame = np.ascontiguousarray(frame)
-    
+
     # Resize while maintaining aspect ratio
     height, width = frame.shape[:2]
-    scale = min(target_width/width, target_height/height)
-    
+    scale = min(target_width / width, target_height / height)
+
     new_width = int(width * scale)
     new_height = int(height * scale)
-    
+
     resized = cv2.resize(frame, (new_width, new_height))
-    
+
+    # Convert BGR to RGB
+    resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+
     # Create black image with target size
     new_img = np.zeros((target_height, target_width, 3), dtype=np.uint8)
-    
+
     # Calculate padding
     y_offset = (target_height - new_height) // 2
     x_offset = (target_width - new_width) // 2
-    
+
     # Place resized image in center
-    new_img[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized
-    
+    new_img[y_offset:y_offset + new_height, x_offset:x_offset + new_width] = resized
+
+    # Transpose if model expects channels-first
+    # Uncomment the following line if your model expects NCHW format
+    # new_img = new_img.transpose((2, 0, 1))
+
     print(f"Preprocessed image shape: {new_img.shape}, dtype: {new_img.dtype}")
     return new_img
 
@@ -211,7 +214,7 @@ def init_hailo():
         
         # Initialize hailo inference
         hailo_inference = HailoAsyncInference(
-            hef_path='/home/johannes/Downloads/yolov5s.hef',
+            hef_path='/home/johannes/Downloads/yolov8n.hef',
             input_queue=input_queue,
             output_queue=output_queue,
             batch_size=1,
@@ -286,37 +289,35 @@ def on_video_frame(frame_data):
         traceback.print_exc()
 
 def process_detections(outputs, frame_shape):
-    """
-    Process YOLOv5 outputs into a format expected by the server.
-    Returns a list of detections with normalized coordinates.
-    """
     height, width = frame_shape[:2]
     detections = []
-    
-    # If outputs is a dictionary (multiple output tensors)
+
     if isinstance(outputs, dict):
         for output_name, output_tensor in outputs.items():
-            print(f"Processing output tensor: {output_name}")
+            print(f"Processing output tensor: {output_name}, shape: {output_tensor.shape}, dtype: {output_tensor.dtype}")
+            # Flatten the output tensor if necessary
+            output_tensor = output_tensor.reshape(-1, output_tensor.shape[-1])
             for detection in output_tensor:
-                print(f"Detection entry: {detection}")  # Debugging line
-                if len(detection) >= 6:  # Make sure we have enough elements
+                print(f"Detection entry: {detection}")
+                if len(detection) >= 6:
                     confidence = float(detection[4])
-                    print(f"Detection confidence: {confidence}")  # Debugging line
-                    if confidence > 0.1:  # Try lowering the threshold
-                        # Normalize coordinates to 0-1 range
+                    print(f"Detection confidence: {confidence}")
+                    if confidence > 0.1:
                         x1 = float(detection[0]) / width
                         y1 = float(detection[1]) / height
                         x2 = float(detection[2]) / width
                         y2 = float(detection[3]) / height
                         class_id = int(detection[5])
-                        
+
                         detections.append({
-                            'box': [y1, x1, y2, x2],  # Format expected by server
+                            'box': [y1, x1, y2, x2],
                             'confidence': confidence,
                             'class_id': class_id
                         })
-    
-    print(f"Detections: {detections}")  # Debugging line to verify final detections
+    else:
+        print("Outputs are not in the expected dictionary format.")
+
+    print(f"Detections: {detections}")
     return detections
 
 def main():
