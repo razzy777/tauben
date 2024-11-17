@@ -444,7 +444,7 @@ class AIProcessor:
         def on_video_frame(frame_data):
             self.process_frame(frame_data)
 
-def process_frame(self, frame_data: str):
+    def process_frame(self, frame_data: str):
         try:
             frame = debug_frame_processing(frame_data)
             if frame is None:
