@@ -92,6 +92,7 @@ class HailoAsyncInference:
         else:
             for i, bindings in enumerate(bindings_list):
                 try:
+                    print(f"Bindings output names: {bindings._output_names}")  # Debugging output names
                     if len(bindings._output_names) == 1:
                         result = bindings.output(bindings._output_names[0]).get_buffer()
                     else:
@@ -99,6 +100,7 @@ class HailoAsyncInference:
                             name: np.expand_dims(bindings.output(name).get_buffer(), axis=0)
                             for name in bindings._output_names
                         }
+                    print(f"Raw result type: {type(result)}, data: {result}")  # Inspect raw output
                     self.output_queue.put((input_batch[i], result))
                 except Exception as e:
                     print(f"Error in callback processing result {i}: {e}")
@@ -106,6 +108,9 @@ class HailoAsyncInference:
     def _create_bindings(self, configured_infer_model):
         try:
             output_vstream_infos = self.hef.get_output_vstream_infos()
+            for info in output_vstream_infos:
+                print(f"Output stream: {info.name}, shape: {info.shape}, format: {info.format}")
+
             if self.output_type is None:
                 output_buffers = {
                     output_vstream_info.name: np.empty(
@@ -129,6 +134,8 @@ class HailoAsyncInference:
 
     def run(self) -> None:
         try:
+            print(f"Model input shape: {self.infer_model.input().shape}")
+            print(f"Model input type: {self.infer_model.input().dtype}")
             with self.infer_model.configure() as configured_infer_model:
                 print("Model configured successfully")
                 while True:
