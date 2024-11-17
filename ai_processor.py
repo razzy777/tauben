@@ -11,6 +11,8 @@ from hailo_platform import (
     HailoSchedulingAlgorithm
 )
 from functools import partial
+import threading
+import traceback
 
 class HailoAsyncInference:
     def __init__(
@@ -50,8 +52,8 @@ class HailoAsyncInference:
         print("Created inference model")
         
         # Set batch size
-        self.infer_model.set_batch_size(1)
-        print(f"Set batch size to 1")
+        self.infer_model.set_batch_size(batch_size)
+        print(f"Set batch size to {batch_size}")
         
         # Set input/output types if specified
         if input_type is not None:
@@ -72,20 +74,20 @@ class HailoAsyncInference:
         
         print("\nOutput Streams:")
         for i, info in enumerate(output_vstream_infos):
-            print(f"- Stream {i}: shape={info.shape}, format={info.format}")
-
+            print(f"- Stream {i}: name={info.name}, shape={info.shape}, format={info.format}")
+    
     def _set_input_type(self, input_type: str) -> None:
         self.infer_model.input().set_format_type(getattr(FormatType, input_type))
-    
+        
     def _set_output_type(self, output_type_dict: Dict[str, str]) -> None:
         for output_name, output_type in output_type_dict.items():
             self.infer_model.output(output_name).set_format_type(
                 getattr(FormatType, output_type)
             )
-
+    
     def get_input_shape(self):
         return self.hef.get_input_vstream_infos()[0].shape
-
+    
     def callback(self, completion_info, bindings_list: list, input_batch: list) -> None:
         if completion_info.exception:
             print(f'Inference error: {completion_info.exception}')
@@ -101,16 +103,11 @@ class HailoAsyncInference:
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
                     print(f"Error in callback processing result {i}: {e}")
-                    import traceback
                     traceback.print_exc()
-
-
+    
     def _create_bindings(self, configured_infer_model):
         try:
             output_vstream_infos = self.hef.get_output_vstream_infos()
-            for info in output_vstream_infos:
-                print(f"Output stream: {info.name}, shape: {info.shape}, format: {info.format}")
-
             if self.output_type is None:
                 output_buffers = {
                     output_vstream_info.name: np.empty(
@@ -130,57 +127,55 @@ class HailoAsyncInference:
             return configured_infer_model.create_bindings(output_buffers=output_buffers)
         except Exception as e:
             print(f"Error creating bindings: {e}")
+            traceback.print_exc()
             raise
+    
+    def run(self) -> None:
+        try:
+            with self.infer_model.configure() as configured_infer_model:
+                print("Model configured successfully")
+                while True:
+                    try:
+                        batch_data = self.input_queue.get()
+                        if batch_data is None:
+                            break  # Stop signal
 
-def run(self) -> None:
-    try:
-        with self.infer_model.configure() as configured_infer_model:
-            print("Model configured successfully")
-            while True:
-                try:
-                    batch_data = self.input_queue.get()
-                    if batch_data is None:
-                        break  # Stop signal
+                        if self.send_original_frame:
+                            original_batch, preprocessed_batch = batch_data
+                        else:
+                            preprocessed_batch = batch_data
 
-                    if self.send_original_frame:
-                        original_batch, preprocessed_batch = batch_data
-                    else:
-                        preprocessed_batch = batch_data
+                        for i, frame in enumerate(preprocessed_batch):
+                            try:
+                                bindings = self._create_bindings(configured_infer_model)
+                                print(f"Input frame shape: {frame.shape}, dtype: {frame.dtype}")
+                                bindings.input().set_buffer(np.array(frame))
 
-                    for i, frame in enumerate(preprocessed_batch):
-                        try:
-                            bindings = self._create_bindings(configured_infer_model)
-                            print(f"Input frame shape: {frame.shape}, dtype: {frame.dtype}")
-                            bindings.input().set_buffer(np.array(frame))
-
-                            configured_infer_model.wait_for_async_ready(timeout_ms=10000)
-                            job = configured_infer_model.run_async(
-                                [bindings],
-                                partial(
-                                    self.callback,
-                                    input_batch=[original_batch[i]] if self.send_original_frame else [preprocessed_batch[i]],
-                                    bindings_list=[bindings]
+                                configured_infer_model.wait_for_async_ready(timeout_ms=10000)
+                                job = configured_infer_model.run_async(
+                                    [bindings],
+                                    partial(
+                                        self.callback,
+                                        input_batch=[original_batch[i]] if self.send_original_frame else [preprocessed_batch[i]],
+                                        bindings_list=[bindings]
+                                    )
                                 )
-                            )
-                            job.wait(10000)
-                        except Exception as e:
-                            print(f"Error processing frame {i}: {e}")
-                            import traceback
-                            traceback.print_exc()
-                except Exception as e:
-                    print(f"Error processing batch: {e}")
-                    import traceback
-                    traceback.print_exc()
-    except Exception as e:
-        print(f"Error in inference thread: {e}")
-        import traceback
-        traceback.print_exc()
-
+                                job.wait(10000)
+                            except Exception as e:
+                                print(f"Error processing frame {i}: {e}")
+                                traceback.print_exc()
+                    except Exception as e:
+                        print(f"Error processing batch: {e}")
+                        traceback.print_exc()
+        except Exception as e:
+            print(f"Error in inference thread: {e}")
+            traceback.print_exc()
+    
 def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     """Preprocess frame for YOLOv5 inference."""
     target_height, target_width = target_shape[0:2]
 
-    # Resize with aspect ratio maintained
+    # Resize while maintaining aspect ratio
     height, width = frame.shape[:2]
     scale = min(target_width / width, target_height / height)
 
@@ -206,7 +201,7 @@ def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     new_img = new_img.astype(np.float32) / 255.0
 
     # If the model expects NCHW format, transpose the dimensions
-    new_img = np.transpose(new_img, (2, 0, 1))
+    # new_img = np.transpose(new_img, (2, 0, 1))  # Uncomment if needed
 
     print(f"Preprocessed image shape: {new_img.shape}, dtype: {new_img.dtype}, min: {new_img.min()}, max: {new_img.max()}")
     return new_img
@@ -220,11 +215,11 @@ def init_hailo():
         
         # Initialize hailo inference
         hailo_inference = HailoAsyncInference(
-            hef_path='/home/johannes/Downloads/yolov8n.hef',
+            hef_path='/home/johannes/Downloads/yolov5n.hef',
             input_queue=input_queue,
             output_queue=output_queue,
             batch_size=1,
-            input_type='FLOAT32',  # YOLOv5 typically expects UINT8 input
+            input_type='FLOAT32',  # Change to FLOAT32 if model expects float inputs
             send_original_frame=True
         )
         
@@ -232,12 +227,11 @@ def init_hailo():
 
     except Exception as e:
         print(f"Failed to initialize Hailo: {e}")
-        import traceback
         traceback.print_exc()
         return None, None, None
 
 sio = socketio.Client(
-    logger=False,
+    logger=False,  # Set to False to remove large data logs
     engineio_logger=False,
     reconnection=True,
     reconnection_attempts=5,
@@ -270,16 +264,16 @@ def on_video_frame(frame_data):
 
         # Get input shape
         input_shape = hailo_inference.get_input_shape()
-        
+
         # Preprocess frame
         preprocessed_frame = preprocess_frame(frame, input_shape)
-        
+
         # Put frame in input queue
         input_queue.put(([frame], [preprocessed_frame]))
-        
+
         # Get results from output queue
         original_frame, outputs = output_queue.get()
-        
+
         if outputs:
             # Convert outputs to detections format expected by the server
             detections = process_detections(outputs, frame.shape)
@@ -291,10 +285,13 @@ def on_video_frame(frame_data):
             
     except Exception as e:
         print(f"Error processing frame: {e}")
-        import traceback
         traceback.print_exc()
 
 def process_detections(outputs, frame_shape):
+    """
+    Process YOLOv5 outputs into a format expected by the server.
+    Returns a list of detections with normalized coordinates.
+    """
     height, width = frame_shape[:2]
     detections = []
 
@@ -352,7 +349,6 @@ def main():
         print("Connected successfully")
         
         # Start inference thread
-        import threading
         inference_thread = threading.Thread(target=hailo_inference.run)
         inference_thread.start()
         print("Started inference thread")
@@ -366,7 +362,6 @@ def main():
         print("Error details:", getattr(e, 'args', ['No details available']))
     except Exception as e:
         print(f"Main error: {e}")
-        import traceback
         traceback.print_exc()
     finally:
         print("Cleaning up...")
