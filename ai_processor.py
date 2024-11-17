@@ -28,7 +28,6 @@ def debug_frame_processing(frame_data: str, save_path: str = 'debug_frames'):
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is not None:
-            print(f"Decoded frame: shape={frame.shape}, dtype={frame.dtype}, range=[{frame.min()}, {frame.max()}]")
             cv2.imwrite(f'{save_path}/1_decoded_frame.jpg', frame)
             return frame
         else:
@@ -67,11 +66,6 @@ class HailoAsyncInference:
         
         # Get input info
         input_vstream_info = self.hef.get_input_vstream_infos()[0]
-        print(f"\nInput stream details:")
-        print(f"- Name: {input_vstream_info.name}")
-        print(f"- Shape: {input_vstream_info.shape}")
-        print(f"- Format: {input_vstream_info.format.type}")
-        print(f"- Order: {input_vstream_info.format.order}")
 
         self.output_type = output_type
         self.send_original_frame = send_original_frame
@@ -101,12 +95,6 @@ class HailoAsyncInference:
                             # Convert to uint8
                             frame_uint8 = self.preprocess_for_hailo(frame)
                             frame_contiguous = np.ascontiguousarray(frame_uint8)
-                            
-                            print(f"\nInput frame details:")
-                            print(f"- Shape: {frame_contiguous.shape}")
-                            print(f"- Type: {frame_contiguous.dtype}")
-                            print(f"- Range: [{frame_contiguous.min()}, {frame_contiguous.max()}]")
-                            print(f"- Is contiguous: {frame_contiguous.flags['C_CONTIGUOUS']}")
                             
                             bindings = self._create_bindings(configured_infer_model)
                             bindings.input().set_buffer(frame_contiguous)
@@ -156,15 +144,11 @@ class HailoAsyncInference:
                         if isinstance(output_buffer, list):
                             output_buffer = np.concatenate(output_buffer, axis=0)
                         
-                        print(f"\nOutput '{name}':")
-                        print(f"- Original shape: {output_buffer.shape}")
-                        
                         # Reshape if necessary
                         if output_buffer.size > 0 and len(output_buffer.shape) == 2:
                             # Try to reshape to (80, 5, 100)
                             try:
                                 output_buffer = output_buffer.reshape(80, 5, 100)
-                                print(f"- Reshaped to: {output_buffer.shape}")
                             except Exception as e:
                                 print(f"- Reshape failed: {e}")
                         
@@ -224,13 +208,16 @@ class ObjectDetectionUtils:
             return []
 
     def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
-        try:
-            # Preprocess image for model input
+        """
+        Preprocess image for YOLOv8 inference.
+        """
+        try:            
+            # 1. Resize with aspect ratio maintained
             img_h, img_w = image.shape[:2]
             scale = min(model_w / img_w, model_h / img_h)
             new_w, new_h = int(img_w * scale), int(img_h * scale)
             resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-
+            # 2. Pad to target size
             delta_w = model_w - new_w
             delta_h = model_h - new_h
             top, bottom = delta_h // 2, delta_h - (delta_h // 2)
@@ -240,8 +227,10 @@ class ObjectDetectionUtils:
                 resized_image, top, bottom, left, right,
                 cv2.BORDER_CONSTANT, value=self.padding_color
             )
-
+            # Keep in BGR format for Hailo
+            # 3. Transpose to CHW format
             chw_image = np.transpose(padded_image, (2, 0, 1))
+            # Ensure C-contiguous
             final_image = np.ascontiguousarray(chw_image)
             return final_image
 
@@ -252,6 +241,10 @@ class ObjectDetectionUtils:
             raise
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
+        """
+        Extract person detections from model output.
+        Format: (N, 5) where each row is [x1, y1, x2, y2, confidence]
+        """
         try:
             boxes = []
             scores = []
@@ -260,32 +253,46 @@ class ObjectDetectionUtils:
 
             output_name = 'yolov8n/yolov8_nms_postprocess'
             output_tensor = input_data[output_name]
-
+            
             if output_tensor.size == 0:
                 return self._empty_detection_result()
 
+            # Process each detection
             for detection in output_tensor:
                 x1, y1, x2, y2, confidence = detection
-
+                
                 if confidence >= self.confidence_threshold:
+                    print(f"\nPotential person detection:")
+                    print(f"- Confidence: {confidence:.3f}")
+                    
+                    # Scale to image coordinates
                     h, w = orig_image_shape
                     x1_px = int(x1 * w)
                     y1_px = int(y1 * h)
                     x2_px = int(x2 * w)
                     y2_px = int(y2 * h)
-
+                    
+                    # Calculate box dimensions
                     width = x2_px - x1_px
                     height = y2_px - y1_px
                     aspect_ratio = height / width if width > 0 else 0
-
-                    MIN_ASPECT_RATIO = 0.5
-                    MAX_ASPECT_RATIO = 3.0
-
+                    
+                    # Debugging: Print box dimensions
+                    print(f"- Bounding box coordinates: x1={x1_px}, y1={y1_px}, x2={x2_px}, y2={y2_px}")
+                    print(f"- Width: {width}, Height: {height}, Aspect Ratio: {aspect_ratio:.2f}")
+                    
+                    # Adjusted aspect ratio thresholds
+                    MIN_ASPECT_RATIO = 0.5  # Adjusted to allow for faces and upper bodies
+                    MAX_ASPECT_RATIO = 3.0  # But not too tall
+                    
                     if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
+                        print(f"- Valid person detection (aspect ratio: {aspect_ratio:.2f})")
                         boxes.append([y1_px, x1_px, y2_px, x2_px])
                         scores.append(float(confidence))
                         classes.append(self.person_class)
                         num_detections += 1
+                    else:
+                        print(f"- Skipped: Invalid aspect ratio ({aspect_ratio:.2f})")
 
             result = {
                 'detection_boxes': boxes,
@@ -293,10 +300,16 @@ class ObjectDetectionUtils:
                 'detection_scores': scores,
                 'num_detections': num_detections
             }
+            
+            if num_detections > 0:
+                print(f"\nExtracted {num_detections} person detections:")
+                for i in range(num_detections):
+                    print(f"Person {i+1}: confidence = {scores[i]:.3f}")
+            
             return result
 
         except Exception as e:
-            self.logger.error(f"Error extracting detections: {e}")
+            print(f"Error extracting detections: {e}")
             import traceback
             traceback.print_exc()
             return self._empty_detection_result()
@@ -345,8 +358,6 @@ class AIProcessor:
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('AIProcessor')
-        self.last_update_time = 0  # Add this line
-
         
         # Initialize components
         self.utils = ObjectDetectionUtils(labels_path)
@@ -391,33 +402,6 @@ class AIProcessor:
         hef = HEF(hef_path)
         input_vstream_info = hef.get_input_vstream_infos()[0]
         output_vstream_info = hef.get_output_vstream_infos()[0]
-        
-        print("\nInput Stream Info:")
-        print(f"- Name: {input_vstream_info.name}")
-        print(f"- Shape: {input_vstream_info.shape}")
-        print(f"- Format: {input_vstream_info.format}")
-        
-        print("\nOutput Stream Info:")
-        print(f"- Name: {output_vstream_info.name}")
-        print(f"- Shape: {output_vstream_info.shape}")
-        print(f"- Format: {output_vstream_info.format}")
-
-    def decode_frame(self, frame_data: str) -> Optional[np.ndarray]:
-        """Decode base64 frame data into an OpenCV image."""
-        try:
-            img_data = base64.b64decode(frame_data)
-            nparr = np.frombuffer(img_data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if frame is not None:
-                return frame
-            else:
-                self.logger.error("Error: Frame decoding failed")
-                return None
-        except Exception as e:
-            self.logger.error(f"Frame decoding error: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
 
     def setup_socket_handlers(self):
         @self.sio.event(namespace='/ai')
@@ -436,44 +420,50 @@ class AIProcessor:
 
     def process_frame(self, frame_data: str):
         try:
-            current_time = time.time()
-            if current_time - self.last_update_time < 1:  # Update at most once per second
-                return
-
-            frame = self.decode_frame(frame_data)
+            frame = debug_frame_processing(frame_data)
             if frame is None:
                 return
 
-            self.last_update_time = current_time  # Move this line after decoding the frame
+            try:
+                preprocessed_frame = self.utils.preprocess(frame, self.width, self.height)
+            except Exception as e:
+                self.logger.error(f"Preprocessing error: {e}")
+                return
 
-            preprocessed_frame = self.utils.preprocess(frame, self.width, self.height)
-            self.input_queue.put(([frame], [preprocessed_frame]), block=False)
+            try:
+                self.input_queue.put(([frame], [preprocessed_frame]), block=False)
+            except queue.Full:
+                self.logger.warning("Input queue full, skipping frame")
+                return
 
-            original_frame, outputs = self.output_queue.get(timeout=2.0)
-            if outputs:
-                detections = self.utils.extract_detections(outputs, frame.shape[:2])
+            try:
+                original_frame, outputs = self.output_queue.get(timeout=2.0)
+                
+                for name, tensor in outputs.items():
+                    if tensor.size > 0:
+                        print(f"- Range: [{tensor.min()}, {tensor.max()}]")
+                        print(f"- First row: {tensor[0]}")
 
-                if detections['num_detections'] > 0:
-                    formatted_detections = self.utils.format_detections_for_frontend(
-                        detections, frame.shape
-                    )
-                    if formatted_detections:
-                        # Log detection information
-                        for det in formatted_detections:
-                            box = det['box']
-                            self.logger.info(
-                                f"Detection: class={det['class']}, score={det['score']:.2f}, box={box}"
-                            )
-                        self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
-                else:
-                    self.logger.info("No detections in this frame.")
-            else:
-                self.logger.info("No outputs received from the inference model.")
+                if outputs:
+                    detections = self.utils.extract_detections(outputs, frame.shape[:2])
+                    
+                    if detections['num_detections'] > 0:
+                        formatted_detections = self.utils.format_detections_for_frontend(
+                            detections, frame.shape
+                        )
+                        if formatted_detections:
+                            self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
+                            print(f"\nEmitted {len(formatted_detections)} detections")
 
-        except queue.Empty:
-            self.logger.warning("Inference timeout.")
+            except queue.Empty:
+                self.logger.warning("Inference timeout")
+            except Exception as e:
+                self.logger.error(f"Inference processing error: {e}")
+                import traceback
+                traceback.print_exc()
+
         except Exception as e:
-            self.logger.error(f"Inference processing error: {e}")
+            self.logger.error(f"Frame processing error: {e}")
             import traceback
             traceback.print_exc()
 
