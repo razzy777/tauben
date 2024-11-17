@@ -261,7 +261,6 @@ class ObjectDetectionUtils:
             traceback.print_exc()
             raise
 
-class ObjectDetectionUtils:
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
         Extract detections from model output.
