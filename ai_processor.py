@@ -224,25 +224,26 @@ class ObjectDetectionUtils:
             return []
 
     def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
-        # Preprocess image for model input
-        img_h, img_w = image.shape[:2]
-        scale = min(model_w / img_w, model_h / img_h)
-        new_w, new_h = int(img_w * scale), int(img_h * scale)
-        resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        try:
+            # Preprocess image for model input
+            img_h, img_w = image.shape[:2]
+            scale = min(model_w / img_w, model_h / img_h)
+            new_w, new_h = int(img_w * scale), int(img_h * scale)
+            resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
-        delta_w = model_w - new_w
-        delta_h = model_h - new_h
-        top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-        left, right = delta_w // 2, delta_w - (delta_w // 2)
+            delta_w = model_w - new_w
+            delta_h = model_h - new_h
+            top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+            left, right = delta_w // 2, delta_w - (delta_w // 2)
 
-        padded_image = cv2.copyMakeBorder(
-            resized_image, top, bottom, left, right,
-            cv2.BORDER_CONSTANT, value=self.padding_color
-        )
+            padded_image = cv2.copyMakeBorder(
+                resized_image, top, bottom, left, right,
+                cv2.BORDER_CONSTANT, value=self.padding_color
+            )
 
-        chw_image = np.transpose(padded_image, (2, 0, 1))
-        final_image = np.ascontiguousarray(chw_image)
-        return final_image
+            chw_image = np.transpose(padded_image, (2, 0, 1))
+            final_image = np.ascontiguousarray(chw_image)
+            return final_image
 
         except Exception as e:
             print(f"Error in preprocessing: {e}")
