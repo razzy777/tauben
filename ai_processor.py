@@ -96,10 +96,14 @@ class HailoAsyncInference:
                     for name in bindings._output_names:
                         output_buffer = bindings.output(name).get_buffer()
                         print(f"Output '{name}' buffer shape: {output_buffer.shape}, dtype: {output_buffer.dtype}")
+                        print(f"Output '{name}' data (sample): {output_buffer.ravel()[:10]}")  # Print first 10 elements
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
                     print(f"Error in callback processing result {i}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
 
     def _create_bindings(self, configured_infer_model):
         try:
@@ -128,52 +132,49 @@ class HailoAsyncInference:
             print(f"Error creating bindings: {e}")
             raise
 
-    def run(self) -> None:
-        try:
-            print(f"Model input shape: {self.infer_model.input().shape}")
-            print(f"Model input type: {self.infer_model.input().dtype}")
-            with self.infer_model.configure() as configured_infer_model:
-                print("Model configured successfully")
-                while True:
-                    try:
-                        batch_data = self.input_queue.get()
-                        if batch_data is None:
-                            break  # Stop signal
-                        
-                        if self.send_original_frame:
-                            original_batch, preprocessed_batch = batch_data
-                        else:
-                            preprocessed_batch = batch_data
+def run(self) -> None:
+    try:
+        with self.infer_model.configure() as configured_infer_model:
+            print("Model configured successfully")
+            while True:
+                try:
+                    batch_data = self.input_queue.get()
+                    if batch_data is None:
+                        break  # Stop signal
 
-                        # Process one frame at a time
-                        for i, frame in enumerate(preprocessed_batch):
-                            try:
-                                bindings = self._create_bindings(configured_infer_model)
-                                bindings.input().set_buffer(np.array(frame))
-                                
-                                # Run inference on single frame
-                                configured_infer_model.wait_for_async_ready(timeout_ms=10000)
-                                job = configured_infer_model.run_async(
-                                    [bindings],
-                                    partial(
-                                        self.callback,
-                                        input_batch=[original_batch[i]] if self.send_original_frame else [preprocessed_batch[i]],
-                                        bindings_list=[bindings]
-                                    )
+                    if self.send_original_frame:
+                        original_batch, preprocessed_batch = batch_data
+                    else:
+                        preprocessed_batch = batch_data
+
+                    for i, frame in enumerate(preprocessed_batch):
+                        try:
+                            bindings = self._create_bindings(configured_infer_model)
+                            print(f"Input frame shape: {frame.shape}, dtype: {frame.dtype}")
+                            bindings.input().set_buffer(np.array(frame))
+
+                            configured_infer_model.wait_for_async_ready(timeout_ms=10000)
+                            job = configured_infer_model.run_async(
+                                [bindings],
+                                partial(
+                                    self.callback,
+                                    input_batch=[original_batch[i]] if self.send_original_frame else [preprocessed_batch[i]],
+                                    bindings_list=[bindings]
                                 )
-                                job.wait(10000)
-                            except Exception as e:
-                                print(f"Error processing frame {i}: {e}")
-                                continue
-                            
-                    except Exception as e:
-                        print(f"Error processing batch: {e}")
-                        continue
-                        
-        except Exception as e:
-            print(f"Error in inference thread: {e}")
-            import traceback
-            traceback.print_exc()
+                            )
+                            job.wait(10000)
+                        except Exception as e:
+                            print(f"Error processing frame {i}: {e}")
+                            import traceback
+                            traceback.print_exc()
+                except Exception as e:
+                    print(f"Error processing batch: {e}")
+                    import traceback
+                    traceback.print_exc()
+    except Exception as e:
+        print(f"Error in inference thread: {e}")
+        import traceback
+        traceback.print_exc()
 
 def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     """Preprocess frame for YOLOv5 inference."""
@@ -194,18 +195,20 @@ def preprocess_frame(frame: np.ndarray, target_shape) -> np.ndarray:
     # Pad to target size
     delta_w = target_width - new_width
     delta_h = target_height - new_height
-    top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-    left, right = delta_w // 2, delta_w - (delta_w // 2)
+    top, bottom = delta_h // 2, delta_h - delta_h // 2
+    left, right = delta_w // 2, delta_w - delta_w // 2
 
-    new_img = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[128, 128, 128])
+    new_img = cv2.copyMakeBorder(
+        resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[128, 128, 128]
+    )
 
-    # Normalize if required (check if the model expects normalization)
-    # new_img = new_img / 255.0
+    # Convert to float32 and normalize to [0, 1]
+    new_img = new_img.astype(np.float32) / 255.0
 
-    # If model expects NCHW format
-    # new_img = np.transpose(new_img, (2, 0, 1))
+    # If the model expects NCHW format, transpose the dimensions
+    new_img = np.transpose(new_img, (2, 0, 1))
 
-    print(f"Preprocessed image shape: {new_img.shape}, dtype: {new_img.dtype}")
+    print(f"Preprocessed image shape: {new_img.shape}, dtype: {new_img.dtype}, min: {new_img.min()}, max: {new_img.max()}")
     return new_img
 
 def init_hailo():
@@ -221,7 +224,7 @@ def init_hailo():
             input_queue=input_queue,
             output_queue=output_queue,
             batch_size=1,
-            input_type='UINT8',  # YOLOv5 typically expects UINT8 input
+            input_type='FLOAT32',  # YOLOv5 typically expects UINT8 input
             send_original_frame=True
         )
         
@@ -292,24 +295,21 @@ def on_video_frame(frame_data):
         traceback.print_exc()
 
 def process_detections(outputs, frame_shape):
-    """
-    Process YOLOv5 outputs into detections.
-    Returns a list of detections with normalized coordinates.
-    """
     height, width = frame_shape[:2]
     detections = []
 
-    # Assuming outputs is a dictionary with output tensor(s)
+    # Assuming outputs is a dictionary with one or more tensors
     for output_name, output_tensor in outputs.items():
         print(f"Processing output tensor: {output_name}, shape: {output_tensor.shape}, dtype: {output_tensor.dtype}")
-        
-        # Flatten the tensor if necessary
+        # Adjust the reshaping based on your output tensor's dimensions
         output_tensor = output_tensor.reshape(-1, output_tensor.shape[-1])
         
         for detection in output_tensor:
-            # Adjust indices based on the output format
+            # Adjust indices based on model output format
             if len(detection) >= 6:
+                # YOLOv5 format: [x_center, y_center, width, height, confidence, class_id]
                 x_center, y_center, w, h, confidence, class_id = detection[:6]
+                confidence = float(confidence)
                 if confidence > 0.1:
                     x1 = (x_center - w / 2) / width
                     y1 = (y_center - h / 2) / height
@@ -318,7 +318,7 @@ def process_detections(outputs, frame_shape):
 
                     detections.append({
                         'box': [y1, x1, y2, x2],
-                        'confidence': float(confidence),
+                        'confidence': confidence,
                         'class_id': int(class_id)
                     })
     print(f"Detections: {detections}")
