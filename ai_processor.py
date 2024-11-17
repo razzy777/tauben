@@ -5,19 +5,17 @@ from pathlib import Path
 import numpy as np
 import queue
 import threading
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
+import socketio
+import base64
+import cv2
+import time
+import logging
 from typing import List, Generator, Optional, Tuple, Dict
 from functools import partial
 from hailo_platform import (
     HEF, VDevice, FormatType, HailoSchedulingAlgorithm
 )
-import socketio
-import base64
-import cv2
-
-# Constants
-IMAGE_EXTENSIONS: Tuple[str, ...] = ('.jpg', '.png', '.bmp', '.jpeg')
-
 
 class HailoAsyncInference:
     def __init__(
@@ -131,7 +129,7 @@ class HailoAsyncInference:
                 output_info.name: np.empty(
                     self.infer_model.output(output_info.name).shape,
                     dtype=np.float32,
-                    order='C'  # Ensure C-contiguous output buffers
+                    order='C'
                 )
                 for output_info in self.hef.get_output_vstream_infos()
             }
@@ -140,32 +138,19 @@ class HailoAsyncInference:
                 name: np.empty(
                     self.infer_model.output(name).shape,
                     dtype=getattr(np, self.output_type[name].lower()),
-                    order='C'  # Ensure C-contiguous output buffers
+                    order='C'
                 )
                 for name in self.output_type
             }
         return configured_infer_model.create_bindings(output_buffers=output_buffers)
 
-
-def generate_color(class_id: int) -> tuple:
-    np.random.seed(class_id)
-    return tuple(np.random.randint(0, 255, size=3).tolist())
-
-
 class ObjectDetectionUtils:
     def __init__(self, labels_path: str, padding_color: tuple = (114, 114, 114)):
-        """Initialize the ObjectDetectionUtils class.
-        
-        Args:
-            labels_path (str): Path to the labels file
-            padding_color (tuple): RGB color used for padding (default: (114, 114, 114))
-        """
         self.labels = self.get_labels(labels_path)
         self.padding_color = padding_color
         print(f"Initialized ObjectDetectionUtils with {len(self.labels)} labels")
 
     def get_labels(self, labels_path: str) -> list:
-        """Load labels from file."""
         try:
             with open(labels_path, 'r', encoding="utf-8") as f:
                 class_names = f.read().splitlines()
@@ -175,16 +160,6 @@ class ObjectDetectionUtils:
             return []
 
     def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
-        """Preprocess image for inference.
-        
-        Args:
-            image (np.ndarray): Input image in BGR format
-            model_w (int): Model input width
-            model_h (int): Model input height
-            
-        Returns:
-            np.ndarray: Preprocessed image in CHW format
-        """
         try:
             print(f"Preprocessing image shape: {image.shape} to {model_w}x{model_h}")
             
@@ -228,15 +203,6 @@ class ObjectDetectionUtils:
             raise
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
-        """Extract detections from model output.
-        
-        Args:
-            input_data (dict): Model output
-            orig_image_shape (tuple): Original image shape (height, width)
-            
-        Returns:
-            dict: Processed detections
-        """
         try:
             boxes = []
             scores = []
@@ -294,15 +260,6 @@ class ObjectDetectionUtils:
             }
 
     def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
-        """Format detections for frontend display.
-        
-        Args:
-            detections (dict): Raw detections
-            image_shape (tuple): Image shape (height, width)
-            
-        Returns:
-            list: Formatted detections for frontend
-        """
         formatted = []
         h, w = image_shape[:2]
         
@@ -321,152 +278,201 @@ class ObjectDetectionUtils:
             
         return formatted
 
+class AIProcessor:
+    def __init__(self, hef_path: str, labels_path: str, server_url: str = 'http://localhost:3000'):
+        # Setup logging
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger('AIProcessor')
+        
+        # Initialize components
+        self.utils = ObjectDetectionUtils(labels_path)
+        
+        # Initialize queues
+        self.input_queue = queue.Queue(maxsize=10)
+        self.output_queue = queue.Queue(maxsize=10)
+        
+        # Initialize Hailo inference
+        self.hailo_inference = HailoAsyncInference(
+            hef_path=hef_path,
+            input_queue=self.input_queue,
+            output_queue=self.output_queue,
+            batch_size=1,
+            input_type='FLOAT32',
+            send_original_frame=True
+        )
+        
+        # Get model dimensions
+        self.height, self.width, _ = self.hailo_inference.get_input_shape()
+        
+        # Initialize socket client
+        self.sio = socketio.Client()
+        self.server_url = server_url
+        self.connected = False
+        
+        # Setup socket handlers
+        self.setup_socket_handlers()
+        
+        # Threading control
+        self.running = False
+        self.inference_thread = None
+
+    def setup_socket_handlers(self):
+        @self.sio.event(namespace='/ai')
+        def connect():
+            self.connected = True
+            self.logger.info('Connected to AI namespace')
+
+        @self.sio.event(namespace='/ai')
+        def disconnect():
+            self.connected = False
+            self.logger.info('Disconnected from AI namespace')
+
+        @self.sio.on('videoFrame', namespace='/ai')
+        def on_video_frame(frame_data):
+            self.process_frame(frame_data)
+
+    def process_frame(self, frame_data: str):
+        try:
+            # Decode frame
+            img_data = base64.b64decode(frame_data)
+            nparr = np.frombuffer(img_data, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                self.logger.error("Could not decode frame")
+                return
+
+            # Preprocess frame
+            preprocessed_frame = self.utils.preprocess(frame, self.width, self.height)
+
+            # Put frame in input queue
+            try:
+                self.input_queue.put(([frame], [preprocessed_frame]), block=False)
+            except queue.Full:
+                self.logger.warning("Input queue full, skipping frame")
+                return
+
+            # Get results
+            try:
+                original_frame, outputs = self.output_queue.get(timeout=2.0)
+                if outputs:
+                    # Extract detections
+                    detections = self.utils.extract_detections(outputs, frame.shape[:2])
+                    if detections['num_detections'] > 0:
+                        # Format detections for frontend
+                        formatted_detections = self.utils.format_detections_for_frontend(
+                            detections, frame.shape
+                        )
+                        # Send to frontend
+                        self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
+                        self.logger.info(f"Sent {len(formatted_detections)} detections")
+                    else:
+                        self.logger.debug("No detections found")
+                else:
+                    self.logger.warning("No outputs from model")
+            except queue.Empty:
+                self.logger.warning("Timeout waiting for inference results")
+
+        except Exception as e:
+            self.logger.error(f"Error processing frame: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def connect(self):
+        while not self.connected:
+            try:
+                self.logger.info(f"Attempting to connect to {self.server_url}")
+                self.sio.connect(
+                    self.server_url,
+                    namespaces=['/ai'],
+                    transports=['websocket']
+                )
+                break
+            except Exception as e:
+                self.logger.error(f"Connection failed: {e}")
+                time.sleep(5)
+
+    def start(self):
+        self.running = True
+        
+        # Start inference thread
+        self.inference_thread = threading.Thread(target=self.hailo_inference.run)
+        self.inference_thread.daemon = True
+        self.inference_thread.start()
+        
+        # Connect to server
+        self.connect()
+        
+        # Main loop
+        try:
+            while self.running:
+                if not self.connected:
+                    self.connect()
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.stop()
+
+    def stop(self):
+        self.running = False
+        if self.connected:
+            self.sio.disconnect()
+        # Send sentinel value to stop inference thread
+        self.input_queue.put(None)
+        if self.inference_thread:
+            self.inference_thread.join()
+        self.logger.info("AI Processor stopped")
+
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="YOLOv8 Object Detection")
+    parser = argparse.ArgumentParser(description="Hailo YOLOv8 Object Detection")
     parser.add_argument(
-        "-n", "--net",
-        help="Path for the network in HEF format.",
+        "--net",
+        help="Path to the HEF file",
         default="/home/johannes/Downloads/yolov8n.hef"
     )
     parser.add_argument(
-        "-l", "--labels",
-        default="coco.txt",
-        help="Path to a text file containing labels."
+        "--labels",
+        help="Path to the labels file",
+        default="coco.txt"
     )
     parser.add_argument(
-        "-b", "--batch_size",
-        default=1,
-        type=int,
-        required=False,
-        help="Number of images in one batch"
+        "--server",
+        help="Server URL",
+        default="http://localhost:3000"
     )
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 def main():
+    # Parse command line arguments
     args = parse_args()
 
-    hef_path = args.net
-    labels_path = args.labels
-    batch_size = args.batch_size
+    # Create output directory if needed
+    os.makedirs("output_images", exist_ok=True)
 
-    # Initialize utility class
-    utils = ObjectDetectionUtils(labels_path)
-
-    # Queues for inference
-    input_queue = queue.Queue()
-    output_queue = queue.Queue()
-
-    # Initialize Hailo inference
-    hailo_inference = HailoAsyncInference(
-        hef_path=hef_path,
-        input_queue=input_queue,
-        output_queue=output_queue,
-        batch_size=batch_size,
-        input_type='FLOAT32',  # Assuming model expects float32 inputs
-        send_original_frame=True
-    )
-    height, width, _ = hailo_inference.get_input_shape()
-
-    # Start inference thread
-    inference_thread = threading.Thread(target=hailo_inference.run)
-    inference_thread.start()
-
-    # Socket.IO client setup
-    sio = socketio.Client()
-
-    @sio.event(namespace='/ai')
-    def connect():
-        print('Connected to AI namespace')
-
-    @sio.event(namespace='/ai')
-    def connect_error(data):
-        print(f'Connection error: {data}')
-
-    @sio.event(namespace='/ai')
-    def disconnect():
-        print('Disconnected from AI namespace')
-
-@sio.on('videoFrame', namespace='/ai')
-def on_video_frame(frame_data):
     try:
-        # Decode base64 frame
-        img_data = base64.b64decode(frame_data)
-        nparr = np.frombuffer(img_data, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        if frame is None:
-            print("Error: Could not decode frame")
-            return
-
-        print(f"Received frame shape: {frame.shape}")
-
-        # Preprocess frame
-        try:
-            preprocessed_frame = utils.preprocess(frame, width, height)
-            print("Frame preprocessed successfully")
-        except Exception as e:
-            print(f"Preprocessing error: {e}")
-            return
-
-        # Put frame in input queue
-        try:
-            input_queue.put(([frame], [preprocessed_frame]))
-            print("Frame queued for inference")
-        except Exception as e:
-            print(f"Queue error: {e}")
-            return
-
-        # Get results from output queue with timeout
-        try:
-            original_frame, outputs = output_queue.get(timeout=2.0)
-            print("Got inference results")
-
-            if outputs:
-                # Extract detections
-                detections = utils.extract_detections(outputs, frame.shape[:2])
-
-                if detections['num_detections'] > 0:
-                    # Format detections for frontend
-                    formatted_detections = utils.format_detections_for_frontend(detections, frame.shape)
-                    
-                    # Emit detections to server
-                    sio.emit('aiDetections', formatted_detections, namespace='/ai')
-                    print(f"Emitted {len(formatted_detections)} detections")
-                else:
-                    print("No detections found")
-            else:
-                print("No outputs from model")
-
-        except queue.Empty:
-            print("Timeout waiting for inference results")
-        except Exception as e:
-            print(f"Error processing inference results: {e}")
-
+        # Initialize and start the AI processor
+        processor = AIProcessor(
+            hef_path=args.net,
+            labels_path=args.labels,
+            server_url=args.server
+        )
+        
+        print(f"Starting AI processor with:")
+        print(f"  HEF path: {args.net}")
+        print(f"  Labels path: {args.labels}")
+        print(f"  Server URL: {args.server}")
+        
+        processor.start()
+        
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+        processor.stop()
     except Exception as e:
-        print(f"Error processing frame: {e}")
+        print(f"Fatal error: {e}")
         import traceback
         traceback.print_exc()
-    # Connect to server
-    connection_url = 'http://localhost:3000'
-    sio.connect(
-        connection_url,
-        namespaces=['/ai'],
-        wait_timeout=10,
-        transports=['websocket', 'polling'],
-        socketio_path='/socket.io',
-    )
-
-    print("Connected successfully")
-    print("Waiting for events...")
-    sio.wait()
-
-    # Cleanup
-    input_queue.put(None)  # Signal inference thread to stop
-    inference_thread.join()
-    if sio.connected:
-        sio.disconnect()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
