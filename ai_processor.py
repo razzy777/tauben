@@ -304,11 +304,15 @@ class ObjectDetectionUtils:
                     height = y2_px - y1_px
                     aspect_ratio = height / width if width > 0 else 0
                     
-                    # Person detection heuristics
-                    MIN_ASPECT_RATIO = 1.2  # Persons are typically taller than wide
+                    # Debugging: Print box dimensions
+                    print(f"- Bounding box coordinates: x1={x1_px}, y1={y1_px}, x2={x2_px}, y2={y2_px}")
+                    print(f"- Width: {width}, Height: {height}, Aspect Ratio: {aspect_ratio:.2f}")
+                    
+                    # Adjusted aspect ratio thresholds
+                    MIN_ASPECT_RATIO = 0.5  # Adjusted to allow for faces and upper bodies
                     MAX_ASPECT_RATIO = 3.0  # But not too tall
                     
-                    if 1.2 <= aspect_ratio <= 3.0:
+                    if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
                         print(f"- Valid person detection (aspect ratio: {aspect_ratio:.2f})")
                         boxes.append([y1_px, x1_px, y2_px, x2_px])
                         scores.append(float(confidence))
