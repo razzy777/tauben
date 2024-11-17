@@ -259,7 +259,7 @@ class ObjectDetectionUtils:
             traceback.print_exc()
             raise
 
-        def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
+    def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
         Extract detections from model output.
         Format appears to be (N, 5) where each row is [x1, y1, x2, y2, confidence]
