@@ -11,7 +11,7 @@ import time
 import logging
 from typing import Optional, Tuple, Dict
 from functools import partial
-from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm
+from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm, postprocess
 
 class HailoAsyncInference:
     def __init__(
@@ -36,6 +36,7 @@ class HailoAsyncInference:
 
         # Always set input to UINT8 first, then convert
         self.infer_model.input().set_format_type(FormatType.UINT8)
+        self.infer_model.output().set_format_type(FormatType.FLOAT32)
         self.output_type = output_type
         self.send_original_frame = send_original_frame
         print(f"Available output vstream infos: {[info.name for info in self.hef.get_output_vstream_infos()]}")
@@ -151,16 +152,13 @@ class ObjectDetectionUtils:
         top, bottom = delta_h // 2, delta_h - (delta_h // 2)
         left, right = delta_w // 2, delta_w - (delta_w // 2)
 
-        # Assuming the model expects BGR images in uint8 format
+        # Assuming the model expects RGB images with values [0, 1]
         padded_image = cv2.copyMakeBorder(
             resized_image, top, bottom, left, right,
             cv2.BORDER_CONSTANT, value=self.padding_color
         )
-
-        # Remove normalization and color conversion if not needed
-        # WE NEED THIS FOR OUR MODEL!!!
         padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
-        # padded_image = padded_image.astype(np.float32) / 255.0
+        padded_image = padded_image.astype(np.float32) / 255.0
 
         # Transpose to CHW format
         chw_image = np.transpose(padded_image, (2, 0, 1))
@@ -175,90 +173,39 @@ class ObjectDetectionUtils:
             if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
-            # Reshape output tensor to (8400, 84)
-            output_tensor = output_tensor.reshape(-1, 84)
-
-            # Extract bounding box parameters and class scores
-            bbox_array = output_tensor[:, :4]  # shape (8400, 4)
-            class_scores = output_tensor[:, 4:]  # shape (8400, 80)
-
-            # Apply sigmoid to class scores to get probabilities
-            class_probs = 1 / (1 + np.exp(-class_scores))  # shape (8400, 80)
-
-            # Get the class with the highest probability for each detection
-            class_ids = np.argmax(class_probs, axis=1)  # shape (8400,)
-            confidences = np.max(class_probs, axis=1)  # shape (8400,)
-
-            # Apply confidence threshold
-            indices = np.where(confidences >= self.confidence_threshold)[0]
-
-            if len(indices) == 0:
-                return self._empty_detection_result()
-
-            # Filter out detections
-            bbox_array = bbox_array[indices]
-            confidences = confidences[indices]
-            class_ids = class_ids[indices]
-
-            # Convert bounding boxes from (center_x, center_y, width, height) to (x1, y1, x2, y2)
-            bbox_array[:, 0] = bbox_array[:, 0] - bbox_array[:, 2] / 2  # x1 = center_x - width / 2
-            bbox_array[:, 1] = bbox_array[:, 1] - bbox_array[:, 3] / 2  # y1 = center_y - height / 2
-            bbox_array[:, 2] = bbox_array[:, 0] + bbox_array[:, 2]      # x2 = x1 + width
-            bbox_array[:, 3] = bbox_array[:, 1] + bbox_array[:, 3]      # y2 = y1 + height
-
-            # Scale bounding boxes to original image size
-            model_input_w, model_input_h = model_input_shape
-            orig_h, orig_w = orig_image_shape
-
-            scale_w = orig_w / model_input_w
-            scale_h = orig_h / model_input_h
-
-            bbox_array[:, [0, 2]] *= scale_w  # x1 and x2
-            bbox_array[:, [1, 3]] *= scale_h  # y1 and y2
-
-            # Clip coordinates to image boundaries
-            bbox_array[:, [0, 2]] = np.clip(bbox_array[:, [0, 2]], 0, orig_w - 1)
-            bbox_array[:, [1, 3]] = np.clip(bbox_array[:, [1, 3]], 0, orig_h - 1)
-
-            # Prepare data for NMS
-            boxes = bbox_array.astype(np.float32).tolist()
-            confidences = confidences.tolist()
-            class_ids = class_ids.tolist()
-
-            # Perform NMS
-            indices = cv2.dnn.NMSBoxes(
-                bboxes=boxes,
-                scores=confidences,
-                score_threshold=self.confidence_threshold,
-                nms_threshold=0.5
+            # Use Hailo's post-processing function for YOLOv8
+            detections = postprocess.yolov8_postprocess(
+                outputs=output_tensor,
+                orig_img_dims=orig_image_shape,
+                input_resize_dims=model_input_shape,
+                nms_iou_thresh=0.45,
+                nms_conf_thresh=self.confidence_threshold,
+                num_classes=len(self.labels)
             )
 
-            if len(indices) > 0:
-                indices = indices.flatten()
-                boxes = [boxes[i] for i in indices]
-                confidences = [confidences[i] for i in indices]
-                class_ids = [class_ids[i] for i in indices]
+            boxes = []
+            scores = []
+            classes = []
+
+            # Filter detections for 'apple' class
+            for det in detections:
+                class_id = det.class_id
+                if self.labels[class_id] == 'apple':
+                    boxes.append([det.ymin, det.xmin, det.ymax, det.xmax])
+                    scores.append(det.confidence)
+                    classes.append(class_id)
+
+            num_detections = len(scores)
+
+            if num_detections > 0:
+                result = {
+                    'detection_boxes': boxes,
+                    'detection_classes': classes,
+                    'detection_scores': scores,
+                    'num_detections': num_detections
+                }
             else:
-                return self._empty_detection_result()
-
-            # Only keep detections of 'apple' class
-            apple_class_indices = [i for i, class_id in enumerate(class_ids) if class_id == self.apple_class]
-
-            if len(apple_class_indices) == 0:
-                return self._empty_detection_result()
-
-            boxes = [boxes[i] for i in apple_class_indices]
-            confidences = [confidences[i] for i in apple_class_indices]
-            class_ids = [class_ids[i] for i in apple_class_indices]
-
-            num_detections = len(confidences)
-
-            result = {
-                'detection_boxes': boxes,
-                'detection_classes': class_ids,
-                'detection_scores': confidences,
-                'num_detections': num_detections
-            }
+                result = self._empty_detection_result()
 
             return result
 
