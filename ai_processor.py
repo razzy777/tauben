@@ -167,7 +167,10 @@ class ObjectDetectionUtils:
         final_image = np.ascontiguousarray(chw_image)
         return final_image
 
-    def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
+    def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int], model_input_shape: Tuple[int, int]) -> dict:
+        """
+        Extract apple detections from model output.
+        """
         try:
             boxes = []
             scores = []
@@ -182,7 +185,7 @@ class ObjectDetectionUtils:
             print(f"Output tensor shape: {output_tensor.shape}")
             print(f"Output tensor data:\n{output_tensor}")
 
-            model_input_w, model_input_h = self.width, self.height
+            model_input_w, model_input_h = model_input_shape
             orig_h, orig_w = orig_image_shape
 
             x_scale = orig_w / model_input_w
@@ -386,7 +389,7 @@ class AIProcessor:
                 original_frame, outputs = self.output_queue.get(timeout=2.0)
 
                 if outputs:
-                    detections = self.utils.extract_detections(outputs, frame.shape[:2])
+                    detections = self.utils.extract_detections(outputs, frame.shape[:2], (self.width, self.height))
 
                     if detections['num_detections'] > 0:
                         formatted_detections = self.utils.format_detections_for_frontend(
