@@ -141,48 +141,38 @@ class ObjectDetectionUtils:
             return []
 
     def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
-        """
-        Preprocess image for YOLOv8 inference.
-        """
-        try:
-            # Resize with aspect ratio maintained
-            img_h, img_w = image.shape[:2]
-            scale = min(model_w / img_w, model_h / img_h)
-            new_w, new_h = int(img_w * scale), int(img_h * scale)
-            resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        img_h, img_w = image.shape[:2]
+        scale = min(model_w / img_w, model_h / img_h)
+        new_w, new_h = int(img_w * scale), int(img_h * scale)
+        resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
-            # Pad to target size
-            delta_w = model_w - new_w
-            delta_h = model_h - new_h
-            top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-            left, right = delta_w // 2, delta_w - (delta_w // 2)
+        # Pad to target size
+        delta_w = model_w - new_w
+        delta_h = model_h - new_h
+        top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+        left, right = delta_w // 2, delta_w - (delta_w // 2)
 
-            padded_image = cv2.copyMakeBorder(
-                resized_image, top, bottom, left, right,
-                cv2.BORDER_CONSTANT, value=self.padding_color
-            )
+        # Assuming the model expects RGB images
+        padded_image = cv2.copyMakeBorder(
+            resized_image, top, bottom, left, right,
+            cv2.BORDER_CONSTANT, value=self.padding_color
+        )
+        padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
 
-            # Transpose to CHW format
-            chw_image = np.transpose(padded_image, (2, 0, 1))
-            final_image = np.ascontiguousarray(chw_image)
-            return final_image
+        # Normalize image if required (e.g., to [0,1])
+        padded_image = padded_image.astype(np.float32) / 255.0
 
-        except Exception as e:
-            print(f"Error in preprocessing: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
+        # Transpose to CHW format
+        chw_image = np.transpose(padded_image, (2, 0, 1))
+        final_image = np.ascontiguousarray(chw_image)
+        return final_image
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
-        """
-        Extract apple detections from model output.
-        """
         try:
             boxes = []
             scores = []
             classes = []
 
-            # Use the actual output name from the model
             output_name = list(input_data.keys())[0]
             output_tensor = input_data.get(output_name)
 
@@ -192,47 +182,56 @@ class ObjectDetectionUtils:
             print(f"Output tensor shape: {output_tensor.shape}")
             print(f"Output tensor data:\n{output_tensor}")
 
-            # Process each detection
+            model_input_w, model_input_h = self.width, self.height
+            orig_h, orig_w = orig_image_shape
+
+            x_scale = orig_w / model_input_w
+            y_scale = orig_h / model_input_h
+
             for detection in output_tensor:
                 if len(detection) == 5:
                     x1, y1, x2, y2, confidence = detection
-                    # Since there is no class_id, we assume all detections are apples
                     class_id = self.apple_class
                 else:
                     print(f"Unexpected detection format: {detection}")
-                    continue  # Skip if the detection format is not as expected
+                    continue
 
                 if confidence >= self.confidence_threshold:
-                    # Ensure coordinates are within [0, 1]
-                    x1 = np.clip(x1, 0, 1)
-                    y1 = np.clip(y1, 0, 1)
-                    x2 = np.clip(x2, 0, 1)
-                    y2 = np.clip(y2, 0, 1)
+                    # If coordinates are in model's input scale
+                    x1_px = int(x1 * x_scale)
+                    y1_px = int(y1 * y_scale)
+                    x2_px = int(x2 * x_scale)
+                    y2_px = int(y2 * y_scale)
 
-                    # Scale to image coordinates
-                    h, w = orig_image_shape
-                    x1_px = int(x1 * w)
-                    y1_px = int(y1 * h)
-                    x2_px = int(x2 * w)
-                    y2_px = int(y2 * h)
+                    # Clip coordinates
+                    x1_px = np.clip(x1_px, 0, orig_w - 1)
+                    y1_px = np.clip(y1_px, 0, orig_h - 1)
+                    x2_px = np.clip(x2_px, 0, orig_w - 1)
+                    y2_px = np.clip(y2_px, 0, orig_h - 1)
 
-                    # Calculate box dimensions
                     width = x2_px - x1_px
                     height = y2_px - y1_px
-                    aspect_ratio = height / width if width > 0 else 0
 
-                    # Aspect ratio thresholds (adjust as needed)
-                    MIN_ASPECT_RATIO = 0.5
-                    MAX_ASPECT_RATIO = 3.0
+                    if width <= 0 or height <= 0:
+                        print("Invalid bounding box with non-positive dimensions.")
+                        continue
+
+                    aspect_ratio = height / width
+                    print(f"Aspect ratio: {aspect_ratio}")
+
+                    # Adjust aspect ratio thresholds
+                    MIN_ASPECT_RATIO = 0.75
+                    MAX_ASPECT_RATIO = 1.3
 
                     if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
                         boxes.append([y1_px, x1_px, y2_px, x2_px])
                         scores.append(float(confidence))
                         classes.append(class_id)
+                    else:
+                        print(f"Aspect ratio {aspect_ratio} out of bounds.")
 
             num_detections = len(scores)
 
-            # Only keep the detection with the highest confidence
             if num_detections > 0:
                 max_conf_idx = np.argmax(scores)
                 result = {
