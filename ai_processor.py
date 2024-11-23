@@ -120,14 +120,17 @@ class ObjectDetectionUtils:
     def __init__(self, labels_path: str, padding_color: tuple = (114, 114, 114)):
         self.labels = self.get_labels(labels_path)
         self.padding_color = padding_color
-        # Find person class index
+        # Find apple class index
         try:
             self.apple_class = self.labels.index('apple')
-            print(f"Person class index: {self.apple_class}")
+            print(f"Apple class index: {self.apple_class}")
         except ValueError:
-            self.apple_class = 0  # Default to 0 if not found
-            print("Warning: 'person' not found in labels, using class index 0")
-        self.confidence_threshold = 0.70  # Adjust as needed
+            print("Error: 'apple' not found in labels!")
+            raise ValueError("Apple class not found in labels")
+            
+        self.confidence_threshold = 0.70
+        self.scale_factors = {'w': 1.0, 'h': 1.0}
+        self.padding = {'top': 0, 'left': 0}
 
     def get_labels(self, labels_path: str) -> list:
         try:
@@ -140,31 +143,47 @@ class ObjectDetectionUtils:
 
     def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
         """
-        Preprocess image for YOLOv8 inference.
+        Preprocess image for YOLOv8 inference with proper scaling factors.
         """
         try:
-            # Resize with aspect ratio maintained
+            # Store original dimensions
             img_h, img_w = image.shape[:2]
+            
+            # Calculate scaling
             scale = min(model_w / img_w, model_h / img_h)
             new_w, new_h = int(img_w * scale), int(img_h * scale)
+            
+            # Store scaling factors for later use
+            self.scale_factors = {
+                'w': model_w / img_w,
+                'h': model_h / img_h
+            }
+            
+            # Resize with aspect ratio maintained
             resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-
-            # Pad to target size
+            
+            # Calculate padding
             delta_w = model_w - new_w
             delta_h = model_h - new_h
-            top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-            left, right = delta_w // 2, delta_w - (delta_w // 2)
-
+            top = delta_h // 2
+            left = delta_w // 2
+            
+            # Store padding for later use
+            self.padding = {'top': top, 'left': left}
+            
+            # Apply padding
             padded_image = cv2.copyMakeBorder(
-                resized_image, top, bottom, left, right,
-                cv2.BORDER_CONSTANT, value=self.padding_color
+                resized_image,
+                top, delta_h - top,
+                left, delta_w - left,
+                cv2.BORDER_CONSTANT,
+                value=self.padding_color
             )
-
+            
             # Transpose to CHW format
             chw_image = np.transpose(padded_image, (2, 0, 1))
-            final_image = np.ascontiguousarray(chw_image)
-            return final_image
-
+            return np.ascontiguousarray(chw_image)
+            
         except Exception as e:
             print(f"Error in preprocessing: {e}")
             import traceback
@@ -173,49 +192,45 @@ class ObjectDetectionUtils:
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
-        Extract person detections from model output.
+        Extract apple detections from model output.
         """
         try:
             boxes = []
             scores = []
             classes = []
 
-            # Adjust according to your model's output names
             output_name = 'yolov8n/yolov8_nms_postprocess'
             output_tensor = input_data.get(output_name)
             
             if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
-            # Process each detection
+            # Get original dimensions
+            orig_h, orig_w = orig_image_shape
+
             for detection in output_tensor:
-                x1, y1, x2, y2, confidence = detection
-
-                if confidence >= self.confidence_threshold:
-                    # Scale to image coordinates
-                    h, w = orig_image_shape
-                    x1_px = int(x1 * w)
-                    y1_px = int(y1 * h)
-                    x2_px = int(x2 * w)
-                    y2_px = int(y2 * h)
-
-                    # Calculate box dimensions
-                    width = x2_px - x1_px
-                    height = y2_px - y1_px
-                    aspect_ratio = height / width if width > 0 else 0
-
-                    # Aspect ratio thresholds
-                    MIN_ASPECT_RATIO = 0.5
-                    MAX_ASPECT_RATIO = 3.0
-
-                    if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
-                        boxes.append([y1_px, x1_px, y2_px, x2_px])
-                        scores.append(float(confidence))
-                        classes.append(self.apple_class)
+                # Get class index and confidence
+                class_id = int(detection[-1])  # Class ID should be the last element
+                confidence = detection[4]  # Confidence score before class scores
+                
+                # Only process if it's an apple and meets confidence threshold
+                if class_id == self.apple_class and confidence >= self.confidence_threshold:
+                    x1, y1, x2, y2 = detection[:4]
+                    
+                    # Convert normalized coordinates back to original image space
+                    x1_px = int(x1 * orig_w)
+                    y1_px = int(y1 * orig_h)
+                    x2_px = int(x2 * orig_w)
+                    y2_px = int(y2 * orig_h)
+                    
+                    # Add to detection lists
+                    boxes.append([y1_px, x1_px, y2_px, x2_px])
+                    scores.append(float(confidence))
+                    classes.append(class_id)
 
             num_detections = len(scores)
-
-            # Only keep the detection with the highest confidence
+            
+            # Keep only the highest confidence detection
             if num_detections > 0:
                 max_conf_idx = np.argmax(scores)
                 result = {
@@ -235,6 +250,7 @@ class ObjectDetectionUtils:
             traceback.print_exc()
             return self._empty_detection_result()
 
+
     def _empty_detection_result(self):
         return {
             'detection_boxes': [],
@@ -244,26 +260,30 @@ class ObjectDetectionUtils:
         }
 
     def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
-        """Format person detections for frontend display."""
+        """Format apple detections for frontend display."""
         try:
             formatted = []
             h, w = image_shape[:2]
             
             for i in range(detections['num_detections']):
+                # Get detection details
                 ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
+                class_id = detections['detection_classes'][i]
                 confidence = detections['detection_scores'][i]
                 
-                formatted_detection = {
-                    'box': [
-                        float(ymin) / h,
-                        float(xmin) / w,
-                        float(ymax) / h,
-                        float(xmax) / w
-                    ],
-                    'class': 'apple',  # Always person
-                    'score': float(confidence)
-                }
-                formatted.append(formatted_detection)
+                # Only format if it's actually an apple
+                if class_id == self.apple_class:
+                    formatted_detection = {
+                        'box': [
+                            float(ymin) / h,
+                            float(xmin) / w,
+                            float(ymax) / h,
+                            float(xmax) / w
+                        ],
+                        'class': 'apple',
+                        'score': float(confidence)
+                    }
+                    formatted.append(formatted_detection)
             
             return formatted
 
