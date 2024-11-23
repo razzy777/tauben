@@ -9,9 +9,12 @@ import base64
 import cv2
 import time
 import logging
+import hailo
 from typing import Optional, Tuple, Dict
 from functools import partial
-from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm, postprocess
+from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm
+from hailo.platform import postprocess
+
 
 class HailoAsyncInference:
     def __init__(
