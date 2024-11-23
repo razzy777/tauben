@@ -29,8 +29,12 @@ const LiveFeedContainer = styled.div`
   &::before {
     content: "";
     display: block;
-    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+    padding-top: 100% /*56.25%; 16:9 Aspect Ratio */
   }
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+
 `;
 
 const VideoOverlayContainer = styled.div`
