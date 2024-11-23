@@ -194,14 +194,15 @@ class ObjectDetectionUtils:
 
             # Process each detection
             for detection in output_tensor:
-                if len(detection) == 6:
-                    x1, y1, x2, y2, confidence, class_id = detection
+                if len(detection) == 5:
+                    x1, y1, x2, y2, confidence = detection
+                    # Since there is no class_id, we assume all detections are apples
+                    class_id = self.apple_class
                 else:
-                    # Adjust according to your output tensor format
-                    x1, y1, x2, y2, confidence = detection[:5]
-                    class_id = detection[5] if len(detection) > 5 else 0
+                    print(f"Unexpected detection format: {detection}")
+                    continue  # Skip if the detection format is not as expected
 
-                if confidence >= self.confidence_threshold and int(class_id) == self.apple_class:
+                if confidence >= self.confidence_threshold:
                     # Ensure coordinates are within [0, 1]
                     x1 = np.clip(x1, 0, 1)
                     y1 = np.clip(y1, 0, 1)
@@ -215,9 +216,19 @@ class ObjectDetectionUtils:
                     x2_px = int(x2 * w)
                     y2_px = int(y2 * h)
 
-                    boxes.append([y1_px, x1_px, y2_px, x2_px])
-                    scores.append(float(confidence))
-                    classes.append(int(class_id))
+                    # Calculate box dimensions
+                    width = x2_px - x1_px
+                    height = y2_px - y1_px
+                    aspect_ratio = height / width if width > 0 else 0
+
+                    # Aspect ratio thresholds (adjust as needed)
+                    MIN_ASPECT_RATIO = 0.5
+                    MAX_ASPECT_RATIO = 3.0
+
+                    if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
+                        boxes.append([y1_px, x1_px, y2_px, x2_px])
+                        scores.append(float(confidence))
+                        classes.append(class_id)
 
             num_detections = len(scores)
 
