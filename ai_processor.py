@@ -377,8 +377,8 @@ class AIProcessor:
     def process_frame(self, frame_data: str):
         try:
             current_time = time.time()
-            if current_time - self.last_update_time < 1:
-                return
+            #if current_time - self.last_update_time < 1:
+            #    return
 
             frame = self.decode_frame(frame_data)
             if frame is None:
