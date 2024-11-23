@@ -168,9 +168,6 @@ class ObjectDetectionUtils:
         return final_image
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int], model_input_shape: Tuple[int, int]) -> dict:
-        """
-        Extract apple detections from model output.
-        """
         try:
             boxes = []
             scores = []
@@ -200,13 +197,25 @@ class ObjectDetectionUtils:
                     continue
 
                 if confidence >= self.confidence_threshold:
-                    # If coordinates are in model's input scale
-                    x1_px = int(x1 * x_scale)
-                    y1_px = int(y1 * y_scale)
-                    x2_px = int(x2 * x_scale)
-                    y2_px = int(y2 * y_scale)
+                    # Ensure coordinates are within [0, 1]
+                    x1 = np.clip(x1, 0, 1)
+                    y1 = np.clip(y1, 0, 1)
+                    x2 = np.clip(x2, 0, 1)
+                    y2 = np.clip(y2, 0, 1)
 
-                    # Clip coordinates
+                    # Swap coordinates if necessary
+                    if x1 > x2:
+                        x1, x2 = x2, x1
+                    if y1 > y2:
+                        y1, y2 = y2, y1
+
+                    # Scale to image coordinates
+                    x1_px = int(x1 * model_input_w * x_scale)
+                    y1_px = int(y1 * model_input_h * y_scale)
+                    x2_px = int(x2 * model_input_w * x_scale)
+                    y2_px = int(y2 * model_input_h * y_scale)
+
+                    # Clip pixel coordinates
                     x1_px = np.clip(x1_px, 0, orig_w - 1)
                     y1_px = np.clip(y1_px, 0, orig_h - 1)
                     x2_px = np.clip(x2_px, 0, orig_w - 1)
