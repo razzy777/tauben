@@ -182,16 +182,24 @@ class ObjectDetectionUtils:
             scores = []
             classes = []
 
-            # Use the correct output name
-            output_name = list(input_data.keys())[0]  # Assuming there's only one output
+            # Use the actual output name from the model
+            output_name = list(input_data.keys())[0]
             output_tensor = input_data.get(output_name)
 
             if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
+            print(f"Output tensor shape: {output_tensor.shape}")
+            print(f"Output tensor data:\n{output_tensor}")
+
             # Process each detection
             for detection in output_tensor:
-                x1, y1, x2, y2, confidence, class_id = detection
+                if len(detection) == 6:
+                    x1, y1, x2, y2, confidence, class_id = detection
+                else:
+                    # Adjust according to your output tensor format
+                    x1, y1, x2, y2, confidence = detection[:5]
+                    class_id = detection[5] if len(detection) > 5 else 0
 
                 if confidence >= self.confidence_threshold and int(class_id) == self.apple_class:
                     # Ensure coordinates are within [0, 1]
