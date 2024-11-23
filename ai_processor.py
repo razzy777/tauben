@@ -38,6 +38,8 @@ class HailoAsyncInference:
         self.infer_model.input().set_format_type(FormatType.UINT8)
         self.output_type = output_type
         self.send_original_frame = send_original_frame
+        print(f"Available output vstream infos: {[info.name for info in self.hef.get_output_vstream_infos()]}")
+
 
     def preprocess_for_hailo(self, frame: np.ndarray) -> np.ndarray:
         """Convert float32 [0,1] to uint8 [0,255]"""
@@ -120,17 +122,14 @@ class ObjectDetectionUtils:
     def __init__(self, labels_path: str, padding_color: tuple = (114, 114, 114)):
         self.labels = self.get_labels(labels_path)
         self.padding_color = padding_color
-        # Find apple class index
+        # Find person class index
         try:
             self.apple_class = self.labels.index('apple')
-            print(f"Apple class index: {self.apple_class}")
+            print(f"Person class index: {self.apple_class}")
         except ValueError:
-            print("Error: 'apple' not found in labels!")
-            raise ValueError("Apple class not found in labels")
-            
-        self.confidence_threshold = 0.70
-        self.scale_factors = {'w': 1.0, 'h': 1.0}
-        self.padding = {'top': 0, 'left': 0}
+            self.apple_class = 0  # Default to 0 if not found
+            print("Warning: 'person' not found in labels, using class index 0")
+        self.confidence_threshold = 0.60  # Adjust as needed
 
     def get_labels(self, labels_path: str) -> list:
         try:
@@ -143,47 +142,31 @@ class ObjectDetectionUtils:
 
     def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
         """
-        Preprocess image for YOLOv8 inference with proper scaling factors.
+        Preprocess image for YOLOv8 inference.
         """
         try:
-            # Store original dimensions
+            # Resize with aspect ratio maintained
             img_h, img_w = image.shape[:2]
-            
-            # Calculate scaling
             scale = min(model_w / img_w, model_h / img_h)
             new_w, new_h = int(img_w * scale), int(img_h * scale)
-            
-            # Store scaling factors for later use
-            self.scale_factors = {
-                'w': model_w / img_w,
-                'h': model_h / img_h
-            }
-            
-            # Resize with aspect ratio maintained
             resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-            
-            # Calculate padding
+
+            # Pad to target size
             delta_w = model_w - new_w
             delta_h = model_h - new_h
-            top = delta_h // 2
-            left = delta_w // 2
-            
-            # Store padding for later use
-            self.padding = {'top': top, 'left': left}
-            
-            # Apply padding
+            top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+            left, right = delta_w // 2, delta_w - (delta_w // 2)
+
             padded_image = cv2.copyMakeBorder(
-                resized_image,
-                top, delta_h - top,
-                left, delta_w - left,
-                cv2.BORDER_CONSTANT,
-                value=self.padding_color
+                resized_image, top, bottom, left, right,
+                cv2.BORDER_CONSTANT, value=self.padding_color
             )
-            
+
             # Transpose to CHW format
             chw_image = np.transpose(padded_image, (2, 0, 1))
-            return np.ascontiguousarray(chw_image)
-            
+            final_image = np.ascontiguousarray(chw_image)
+            return final_image
+
         except Exception as e:
             print(f"Error in preprocessing: {e}")
             import traceback
@@ -192,68 +175,52 @@ class ObjectDetectionUtils:
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
-        Extract apple detections from model output with debug logging.
+        Extract apple detections from model output.
         """
         try:
             boxes = []
             scores = []
             classes = []
 
-            output_name = 'yolov8n/yolov8_nms_postprocess'
+            # Use the correct output name
+            output_name = list(input_data.keys())[0]  # Assuming there's only one output
             output_tensor = input_data.get(output_name)
-            
-            if output_tensor is None:
-                print("No output tensor found!")
-                return self._empty_detection_result()
-            
-            if output_tensor.size == 0:
-                print("Output tensor is empty!")
+
+            if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
-            print(f"Processing output tensor of shape: {output_tensor.shape}")
-            
-            # Get original dimensions
-            orig_h, orig_w = orig_image_shape
-            
             # Process each detection
-            for i, detection in enumerate(output_tensor):
-                # Debug print first few detections
-                if i < 3:  # Print first 3 detections for debugging
-                    print(f"Raw detection {i}: {detection}")
-                
-                # Check if we have the expected number of elements (should be box coords + confidence + class)
-                if len(detection) >= 5:  # At minimum: 4 box coords + 1 confidence
-                    x1, y1, x2, y2, confidence = detection[:5]
-                    
-                    # Print confidence for debugging
-                    if confidence > 0.1:  # Print any detection with reasonable confidence
-                        print(f"Detection {i}: conf={confidence:.3f}")
-                    
-                    if confidence >= self.confidence_threshold:
-                        # Convert normalized coordinates to pixel coordinates
-                        x1_px = int(x1 * orig_w)
-                        y1_px = int(y1 * orig_h)
-                        x2_px = int(x2 * orig_w)
-                        y2_px = int(y2 * orig_h)
-                        
-                        # Add detection
-                        boxes.append([y1_px, x1_px, y2_px, x2_px])
-                        scores.append(float(confidence))
-                        classes.append(self.apple_class)  # Assuming it's an apple detection
-                        
-                        print(f"Added detection: box=[{y1_px}, {x1_px}, {y2_px}, {x2_px}], "
-                              f"confidence={confidence:.3f}")
+            for detection in output_tensor:
+                x1, y1, x2, y2, confidence, class_id = detection
+
+                if confidence >= self.confidence_threshold and int(class_id) == self.apple_class:
+                    # Ensure coordinates are within [0, 1]
+                    x1 = np.clip(x1, 0, 1)
+                    y1 = np.clip(y1, 0, 1)
+                    x2 = np.clip(x2, 0, 1)
+                    y2 = np.clip(y2, 0, 1)
+
+                    # Scale to image coordinates
+                    h, w = orig_image_shape
+                    x1_px = int(x1 * w)
+                    y1_px = int(y1 * h)
+                    x2_px = int(x2 * w)
+                    y2_px = int(y2 * h)
+
+                    boxes.append([y1_px, x1_px, y2_px, x2_px])
+                    scores.append(float(confidence))
+                    classes.append(int(class_id))
 
             num_detections = len(scores)
-            print(f"Total detections found: {num_detections}")
-            
-            # Keep all detections for now (remove highest confidence filter temporarily)
+
+            # Only keep the detection with the highest confidence
             if num_detections > 0:
+                max_conf_idx = np.argmax(scores)
                 result = {
-                    'detection_boxes': boxes,
-                    'detection_classes': classes,
-                    'detection_scores': scores,
-                    'num_detections': num_detections
+                    'detection_boxes': [boxes[max_conf_idx]],
+                    'detection_classes': [classes[max_conf_idx]],
+                    'detection_scores': [scores[max_conf_idx]],
+                    'num_detections': 1
                 }
             else:
                 result = self._empty_detection_result()
@@ -266,7 +233,6 @@ class ObjectDetectionUtils:
             traceback.print_exc()
             return self._empty_detection_result()
 
-
     def _empty_detection_result(self):
         return {
             'detection_boxes': [],
@@ -276,15 +242,12 @@ class ObjectDetectionUtils:
         }
 
     def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
-        """Format apple detections for frontend display with debug info."""
+        """Format person detections for frontend display."""
         try:
             formatted = []
             h, w = image_shape[:2]
             
-            print(f"Formatting {detections['num_detections']} detections for frontend")
-            
             for i in range(detections['num_detections']):
-                # Get detection details
                 ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
                 confidence = detections['detection_scores'][i]
                 
@@ -295,13 +258,10 @@ class ObjectDetectionUtils:
                         float(ymax) / h,
                         float(xmax) / w
                     ],
-                    'class': 'apple',
+                    'class': 'apple',  # Always person
                     'score': float(confidence)
                 }
                 formatted.append(formatted_detection)
-                
-                print(f"Detection {i}: box={formatted_detection['box']}, "
-                      f"confidence={formatted_detection['score']:.3f}")
             
             return formatted
 
