@@ -128,7 +128,7 @@ class ObjectDetectionUtils:
             print("Error: 'apple' not found in labels!")
             raise ValueError("Apple class not found in labels")
             
-        self.confidence_threshold = 0.25
+        self.confidence_threshold = 0.70
         self.scale_factors = {'w': 1.0, 'h': 1.0}
         self.padding = {'top': 0, 'left': 0}
 
