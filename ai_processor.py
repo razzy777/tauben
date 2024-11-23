@@ -169,84 +169,96 @@ class ObjectDetectionUtils:
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int], model_input_shape: Tuple[int, int]) -> dict:
         try:
-            boxes = []
-            scores = []
-            classes = []
-
             output_name = list(input_data.keys())[0]
             output_tensor = input_data.get(output_name)
 
             if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
-            print(f"Output tensor shape: {output_tensor.shape}")
-            print(f"Output tensor data:\n{output_tensor}")
+            # Reshape output tensor to (8400, 84)
+            output_tensor = output_tensor.reshape(-1, 84)
 
+            # Extract bounding box parameters and class scores
+            bbox_array = output_tensor[:, :4]  # shape (8400, 4)
+            class_scores = output_tensor[:, 4:]  # shape (8400, 80)
+
+            # Apply sigmoid to class scores to get probabilities
+            class_probs = 1 / (1 + np.exp(-class_scores))  # shape (8400, 80)
+
+            # Get the class with the highest probability for each detection
+            class_ids = np.argmax(class_probs, axis=1)  # shape (8400,)
+            confidences = np.max(class_probs, axis=1)  # shape (8400,)
+
+            # Apply confidence threshold
+            indices = np.where(confidences >= self.confidence_threshold)[0]
+
+            if len(indices) == 0:
+                return self._empty_detection_result()
+
+            # Filter out detections
+            bbox_array = bbox_array[indices]
+            confidences = confidences[indices]
+            class_ids = class_ids[indices]
+
+            # Convert bounding boxes from (center_x, center_y, width, height) to (x1, y1, x2, y2)
+            bbox_array[:, 0] = bbox_array[:, 0] - bbox_array[:, 2] / 2  # x1 = center_x - width / 2
+            bbox_array[:, 1] = bbox_array[:, 1] - bbox_array[:, 3] / 2  # y1 = center_y - height / 2
+            bbox_array[:, 2] = bbox_array[:, 0] + bbox_array[:, 2]      # x2 = x1 + width
+            bbox_array[:, 3] = bbox_array[:, 1] + bbox_array[:, 3]      # y2 = y1 + height
+
+            # Scale bounding boxes to original image size
             model_input_w, model_input_h = model_input_shape
             orig_h, orig_w = orig_image_shape
 
-            x_scale = orig_w / model_input_w
-            y_scale = orig_h / model_input_h
+            scale_w = orig_w / model_input_w
+            scale_h = orig_h / model_input_h
 
-            for detection in output_tensor:
-                if len(detection) == 5:
-                    x1, y1, x2, y2, confidence = detection
-                    class_id = self.apple_class
-                else:
-                    print(f"Unexpected detection format: {detection}")
-                    continue
+            bbox_array[:, [0, 2]] *= scale_w  # x1 and x2
+            bbox_array[:, [1, 3]] *= scale_h  # y1 and y2
 
-                if confidence >= self.confidence_threshold:
-                    # Remove clipping to [0, 1] if coordinates are in pixels
-                    # Swap coordinates if necessary
-                    if x1 > x2:
-                        x1, x2 = x2, x1
-                    if y1 > y2:
-                        y1, y2 = y2, y1
+            # Clip coordinates to image boundaries
+            bbox_array[:, [0, 2]] = np.clip(bbox_array[:, [0, 2]], 0, orig_w - 1)
+            bbox_array[:, [1, 3]] = np.clip(bbox_array[:, [1, 3]], 0, orig_h - 1)
 
-                    # Scale to original image size
-                    x1_px = int(x1 * x_scale)
-                    y1_px = int(y1 * y_scale)
-                    x2_px = int(x2 * x_scale)
-                    y2_px = int(y2 * y_scale)
+            # Prepare data for NMS
+            boxes = bbox_array.astype(np.float32).tolist()
+            confidences = confidences.tolist()
+            class_ids = class_ids.tolist()
 
-                    # Clip pixel coordinates to image boundaries
-                    x1_px = np.clip(x1_px, 0, orig_w - 1)
-                    y1_px = np.clip(y1_px, 0, orig_h - 1)
-                    x2_px = np.clip(x2_px, 0, orig_w - 1)
-                    y2_px = np.clip(y2_px, 0, orig_h - 1)
+            # Perform NMS
+            indices = cv2.dnn.NMSBoxes(
+                bboxes=boxes,
+                scores=confidences,
+                score_threshold=self.confidence_threshold,
+                nms_threshold=0.5
+            )
 
-                    width = x2_px - x1_px
-                    height = y2_px - y1_px
-
-                    if width <= 0 or height <= 0:
-                        print("Invalid bounding box with non-positive dimensions.")
-                        continue
-
-                    aspect_ratio = height / width
-                    print(f"Aspect ratio: {aspect_ratio}")
-
-                    # Adjust aspect ratio thresholds if necessary
-                    MIN_ASPECT_RATIO = 0.5
-                    MAX_ASPECT_RATIO = 1.5
-
-                    # For now, accept all aspect ratios
-                    boxes.append([y1_px, x1_px, y2_px, x2_px])
-                    scores.append(float(confidence))
-                    classes.append(class_id)
-
-            num_detections = len(scores)
-
-            if num_detections > 0:
-                max_conf_idx = np.argmax(scores)
-                result = {
-                    'detection_boxes': [boxes[max_conf_idx]],
-                    'detection_classes': [classes[max_conf_idx]],
-                    'detection_scores': [scores[max_conf_idx]],
-                    'num_detections': 1
-                }
+            if len(indices) > 0:
+                indices = indices.flatten()
+                boxes = [boxes[i] for i in indices]
+                confidences = [confidences[i] for i in indices]
+                class_ids = [class_ids[i] for i in indices]
             else:
-                result = self._empty_detection_result()
+                return self._empty_detection_result()
+
+            # Only keep detections of 'apple' class
+            apple_class_indices = [i for i, class_id in enumerate(class_ids) if class_id == self.apple_class]
+
+            if len(apple_class_indices) == 0:
+                return self._empty_detection_result()
+
+            boxes = [boxes[i] for i in apple_class_indices]
+            confidences = [confidences[i] for i in apple_class_indices]
+            class_ids = [class_ids[i] for i in apple_class_indices]
+
+            num_detections = len(confidences)
+
+            result = {
+                'detection_boxes': boxes,
+                'detection_classes': class_ids,
+                'detection_scores': confidences,
+                'num_detections': num_detections
+            }
 
             return result
 
