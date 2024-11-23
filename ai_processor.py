@@ -42,10 +42,9 @@ class HailoAsyncInference:
 
 
     def preprocess_for_hailo(self, frame: np.ndarray) -> np.ndarray:
-        """Convert float32 [0,1] to uint8 [0,255]"""
-        if frame.dtype == np.float32:
-            frame = (frame * 255).astype(np.uint8)
+        """No need to convert; assume input is already in uint8 format"""
         return frame
+
 
     def run(self) -> None:
         try:
@@ -152,15 +151,16 @@ class ObjectDetectionUtils:
         top, bottom = delta_h // 2, delta_h - (delta_h // 2)
         left, right = delta_w // 2, delta_w - (delta_w // 2)
 
-        # Assuming the model expects RGB images
+        # Assuming the model expects BGR images in uint8 format
         padded_image = cv2.copyMakeBorder(
             resized_image, top, bottom, left, right,
             cv2.BORDER_CONSTANT, value=self.padding_color
         )
-        padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
 
-        # Normalize image if required (e.g., to [0,1])
-        padded_image = padded_image.astype(np.float32) / 255.0
+        # Remove normalization and color conversion if not needed
+        # WE NEED THIS FOR OUR MODEL!!!
+        padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
+        # padded_image = padded_image.astype(np.float32) / 255.0
 
         # Transpose to CHW format
         chw_image = np.transpose(padded_image, (2, 0, 1))
@@ -197,25 +197,20 @@ class ObjectDetectionUtils:
                     continue
 
                 if confidence >= self.confidence_threshold:
-                    # Ensure coordinates are within [0, 1]
-                    x1 = np.clip(x1, 0, 1)
-                    y1 = np.clip(y1, 0, 1)
-                    x2 = np.clip(x2, 0, 1)
-                    y2 = np.clip(y2, 0, 1)
-
+                    # Remove clipping to [0, 1] if coordinates are in pixels
                     # Swap coordinates if necessary
                     if x1 > x2:
                         x1, x2 = x2, x1
                     if y1 > y2:
                         y1, y2 = y2, y1
 
-                    # Scale to image coordinates
-                    x1_px = int(x1 * model_input_w * x_scale)
-                    y1_px = int(y1 * model_input_h * y_scale)
-                    x2_px = int(x2 * model_input_w * x_scale)
-                    y2_px = int(y2 * model_input_h * y_scale)
+                    # Scale to original image size
+                    x1_px = int(x1 * x_scale)
+                    y1_px = int(y1 * y_scale)
+                    x2_px = int(x2 * x_scale)
+                    y2_px = int(y2 * y_scale)
 
-                    # Clip pixel coordinates
+                    # Clip pixel coordinates to image boundaries
                     x1_px = np.clip(x1_px, 0, orig_w - 1)
                     y1_px = np.clip(y1_px, 0, orig_h - 1)
                     x2_px = np.clip(x2_px, 0, orig_w - 1)
@@ -231,16 +226,14 @@ class ObjectDetectionUtils:
                     aspect_ratio = height / width
                     print(f"Aspect ratio: {aspect_ratio}")
 
-                    # Adjust aspect ratio thresholds
-                    MIN_ASPECT_RATIO = 0.75
-                    MAX_ASPECT_RATIO = 1.3
+                    # Adjust aspect ratio thresholds if necessary
+                    MIN_ASPECT_RATIO = 0.5
+                    MAX_ASPECT_RATIO = 1.5
 
-                    if MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO:
-                        boxes.append([y1_px, x1_px, y2_px, x2_px])
-                        scores.append(float(confidence))
-                        classes.append(class_id)
-                    else:
-                        print(f"Aspect ratio {aspect_ratio} out of bounds.")
+                    # For now, accept all aspect ratios
+                    boxes.append([y1_px, x1_px, y2_px, x2_px])
+                    scores.append(float(confidence))
+                    classes.append(class_id)
 
             num_detections = len(scores)
 
