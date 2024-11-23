@@ -128,7 +128,7 @@ class ObjectDetectionUtils:
             print("Error: 'apple' not found in labels!")
             raise ValueError("Apple class not found in labels")
             
-        self.confidence_threshold = 0.70
+        self.confidence_threshold = 0.25
         self.scale_factors = {'w': 1.0, 'h': 1.0}
         self.padding = {'top': 0, 'left': 0}
 
@@ -192,7 +192,7 @@ class ObjectDetectionUtils:
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         """
-        Extract apple detections from model output.
+        Extract apple detections from model output with debug logging.
         """
         try:
             boxes = []
@@ -202,42 +202,58 @@ class ObjectDetectionUtils:
             output_name = 'yolov8n/yolov8_nms_postprocess'
             output_tensor = input_data.get(output_name)
             
-            if output_tensor is None or output_tensor.size == 0:
+            if output_tensor is None:
+                print("No output tensor found!")
+                return self._empty_detection_result()
+            
+            if output_tensor.size == 0:
+                print("Output tensor is empty!")
                 return self._empty_detection_result()
 
+            print(f"Processing output tensor of shape: {output_tensor.shape}")
+            
             # Get original dimensions
             orig_h, orig_w = orig_image_shape
-
-            for detection in output_tensor:
-                # Get class index and confidence
-                class_id = int(detection[-1])  # Class ID should be the last element
-                confidence = detection[4]  # Confidence score before class scores
+            
+            # Process each detection
+            for i, detection in enumerate(output_tensor):
+                # Debug print first few detections
+                if i < 3:  # Print first 3 detections for debugging
+                    print(f"Raw detection {i}: {detection}")
                 
-                # Only process if it's an apple and meets confidence threshold
-                if class_id == self.apple_class and confidence >= self.confidence_threshold:
-                    x1, y1, x2, y2 = detection[:4]
+                # Check if we have the expected number of elements (should be box coords + confidence + class)
+                if len(detection) >= 5:  # At minimum: 4 box coords + 1 confidence
+                    x1, y1, x2, y2, confidence = detection[:5]
                     
-                    # Convert normalized coordinates back to original image space
-                    x1_px = int(x1 * orig_w)
-                    y1_px = int(y1 * orig_h)
-                    x2_px = int(x2 * orig_w)
-                    y2_px = int(y2 * orig_h)
+                    # Print confidence for debugging
+                    if confidence > 0.1:  # Print any detection with reasonable confidence
+                        print(f"Detection {i}: conf={confidence:.3f}")
                     
-                    # Add to detection lists
-                    boxes.append([y1_px, x1_px, y2_px, x2_px])
-                    scores.append(float(confidence))
-                    classes.append(class_id)
+                    if confidence >= self.confidence_threshold:
+                        # Convert normalized coordinates to pixel coordinates
+                        x1_px = int(x1 * orig_w)
+                        y1_px = int(y1 * orig_h)
+                        x2_px = int(x2 * orig_w)
+                        y2_px = int(y2 * orig_h)
+                        
+                        # Add detection
+                        boxes.append([y1_px, x1_px, y2_px, x2_px])
+                        scores.append(float(confidence))
+                        classes.append(self.apple_class)  # Assuming it's an apple detection
+                        
+                        print(f"Added detection: box=[{y1_px}, {x1_px}, {y2_px}, {x2_px}], "
+                              f"confidence={confidence:.3f}")
 
             num_detections = len(scores)
+            print(f"Total detections found: {num_detections}")
             
-            # Keep only the highest confidence detection
+            # Keep all detections for now (remove highest confidence filter temporarily)
             if num_detections > 0:
-                max_conf_idx = np.argmax(scores)
                 result = {
-                    'detection_boxes': [boxes[max_conf_idx]],
-                    'detection_classes': [classes[max_conf_idx]],
-                    'detection_scores': [scores[max_conf_idx]],
-                    'num_detections': 1
+                    'detection_boxes': boxes,
+                    'detection_classes': classes,
+                    'detection_scores': scores,
+                    'num_detections': num_detections
                 }
             else:
                 result = self._empty_detection_result()
@@ -260,30 +276,32 @@ class ObjectDetectionUtils:
         }
 
     def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
-        """Format apple detections for frontend display."""
+        """Format apple detections for frontend display with debug info."""
         try:
             formatted = []
             h, w = image_shape[:2]
             
+            print(f"Formatting {detections['num_detections']} detections for frontend")
+            
             for i in range(detections['num_detections']):
                 # Get detection details
                 ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
-                class_id = detections['detection_classes'][i]
                 confidence = detections['detection_scores'][i]
                 
-                # Only format if it's actually an apple
-                if class_id == self.apple_class:
-                    formatted_detection = {
-                        'box': [
-                            float(ymin) / h,
-                            float(xmin) / w,
-                            float(ymax) / h,
-                            float(xmax) / w
-                        ],
-                        'class': 'apple',
-                        'score': float(confidence)
-                    }
-                    formatted.append(formatted_detection)
+                formatted_detection = {
+                    'box': [
+                        float(ymin) / h,
+                        float(xmin) / w,
+                        float(ymax) / h,
+                        float(xmax) / w
+                    ],
+                    'class': 'apple',
+                    'score': float(confidence)
+                }
+                formatted.append(formatted_detection)
+                
+                print(f"Detection {i}: box={formatted_detection['box']}, "
+                      f"confidence={formatted_detection['score']:.3f}")
             
             return formatted
 
