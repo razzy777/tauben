@@ -234,15 +234,6 @@ function App() {
     }
   }, []);
 
-  const moveServoRelativeDebounced = useCallback(
-    debounce((pan, tilt) => {
-      if (socketRef.current) {
-        socketRef.current.emit('moveServoRelative', { pan, tilt });
-      }
-    }, 100),
-    []
-  );
-
   // Socket connection setup
   useEffect(() => {
     const cleanup = () => {
@@ -296,12 +287,6 @@ function App() {
 
       socket.on('detections', (data) => {
         setDetections(data);
-        if (data.length > 0) {
-          const personDetection = data.find(d => d.class === 'person');
-          if (personDetection) {
-            adjustServosToFollow(personDetection.box);
-          }
-        }
       });
 
       socketRef.current = socket;
@@ -395,20 +380,6 @@ function App() {
       socketRef.current.emit('activateWater', 500);
     }
   };
-
-  const adjustServosToFollow = useCallback((boundingBox) => {
-    const [ymin, xmin, ymax, xmax] = boundingBox;
-    const centerX = (xmin + xmax) / 2;
-    const centerY = (ymin + ymax) / 2;
-
-    const deltaX = (centerX - 0.5) * 2;
-    const deltaY = (centerY - 0.5) * 2;
-
-    const panMovement = -deltaX * 5;
-    const tiltMovement = deltaY * 5;
-
-    moveServoRelativeDebounced(panMovement, tiltMovement);
-  }, [moveServoRelativeDebounced]);
 
   return (
     <Container>

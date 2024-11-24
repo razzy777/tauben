@@ -266,7 +266,7 @@ aiNamespace.on('connection', (socket) => {
     if (detections.length > 0) {
         let returnObjs = [];
         for (let filteredDetection of detections) {
-            const FILTER_CONFIDENCE = 0.7
+            const FILTER_CONFIDENCE = 0.4
             const FILTER_CLASS = 'apple'
             let boundingBox = filteredDetection.values[0];
             let classId = filteredDetection.classId;
@@ -284,7 +284,19 @@ aiNamespace.on('connection', (socket) => {
             });
         }
         frontendNamespace.emit('detections', returnObjs);
-    }
+
+        const [ymin, xmin, ymax, xmax] = returnObjs.box;
+        const centerX = (xmin + xmax) / 2;
+        const centerY = (ymin + ymax) / 2;
+    
+        const deltaX = (centerX - 0.5) * 2;
+        const deltaY = (centerY - 0.5) * 2;
+    
+        const panMovement = -deltaX * 5;
+        const tiltMovement = deltaY * 5;
+
+        servoSystem.moveToPositionRelative(panMovement, tiltMovement);
+    }    
     
     // Implement logic to move servos based on detections
     /*if (detections && detections.length > 0) {
