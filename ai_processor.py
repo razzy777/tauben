@@ -204,16 +204,20 @@ class ObjectDetectionUtils:
 
 
             
-            if (
-                output_list is None 
-                or not isinstance(output_list, list) 
-                or all(
-                    isinstance(arr, np.ndarray) and arr.size == 0 
-                    if isinstance(arr, np.ndarray) 
-                    else True  # Treat non-array items as "empty"
-                    for arr in output_list
-                )
-            ):
+            if output_list is None or not isinstance(output_list, list):
+                return self._empty_detection_result()
+
+            # Create the formatted array with objects
+            formatted_output = []
+            for index, arr in enumerate(output_list):
+                if isinstance(arr, np.ndarray) and arr.size > 0:
+                    formatted_output.append({
+                        "classId": index,
+                        "values": arr.tolist()  # Convert NumPy array to list for better readability
+                    })
+
+            # Check if the new array is empty
+            if len(formatted_output) == 0:
                 return self._empty_detection_result()
             print("999 here!!!!:")
 
