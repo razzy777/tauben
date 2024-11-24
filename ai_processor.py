@@ -11,8 +11,7 @@ import time
 import logging
 from typing import Optional, Tuple, Dict
 from functools import partial
-from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm
-from hailo.platform import postprocess
+from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm, postprocess
 
 
 class HailoAsyncInference:
