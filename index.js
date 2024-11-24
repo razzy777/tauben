@@ -263,9 +263,9 @@ aiNamespace.on('connection', (socket) => {
     // Broadcast detections to connected frontend clients
     console.log('here are the detections', detections[0].values)
     let APPLE_CLASS_ID = 47
-    let detections = detections.filter(x => x.classId == APPLE_CLASS_ID)
-    if (detections.length > 0){
-        let boundingBox = detections[0].values
+    let filteredDetections = detections.filter(x => x.classId == APPLE_CLASS_ID)
+    if (filteredDetections.length > 0){
+        let boundingBox = filteredDetections[0].values
         frontendNamespace.emit('detections', boundingBox);
     }
 
