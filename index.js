@@ -266,11 +266,14 @@ aiNamespace.on('connection', (socket) => {
     if (detections.length > 0) {
         let returnObjs = [];
         for (let filteredDetection of detections) {
+            const FILTER_CONFIDENCE = 0.7
+            const FILTER_CLASS = 'apple'
             let boundingBox = filteredDetection.values[0];
             let classId = filteredDetection.classId;
             // Look up the class name from coco.txt using the classId as index
             let className = cocoLabels[classId] || `Unknown (${classId})`;
-            
+            if (FILTER_CLASS && FILTER_CLASS !== className) continue
+            if (FILTER_CONFIDENCE > boundingBox[4]) continue
             returnObjs.push({
                 box: boundingBox,
                 meta: {
