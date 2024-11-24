@@ -199,15 +199,21 @@ class ObjectDetectionUtils:
             output_name = list(input_data.keys())[0]
             output_list = input_data.get(output_name)
             
-            if output_list is None or not isinstance(output_list, (list, np.ndarray)):
+            if (output_list is None or not isinstance(output_list, list) or len(output_list) == 0):
                 return self._empty_detection_result()
-            if isinstance(output_list, list) and len(output_list) == 0:
-                return self._empty_detection_result()
-            if isinstance(output_list, np.ndarray) and output_list.size == 0:
+            
+            # Access the nested list containing class detections
+            output_list = output_list[0]
+
+            if not isinstance(output_list, list):
                 return self._empty_detection_result()
 
             print("\nProcessing detections:")
             print(f"Number of detection classes: {len(output_list)}")
+            print(f"output_list type: {type(output_list)}")
+            print(f"output_list length: {len(output_list)}")
+            print(f"First item type: {type(output_list[0]) if len(output_list) > 0 else 'N/A'}")
+
 
             boxes = []
             scores = []
@@ -268,9 +274,14 @@ class ObjectDetectionUtils:
                 confidence = detections['detection_scores'][i]
                 class_id = detections['detection_classes'][i]
                 
+                # Convert normalized coordinates to pixel values
+                img_h, img_w = image_shape[:2]
+                ymin_pix, xmin_pix = int(ymin * img_h), int(xmin * img_w)
+                ymax_pix, xmax_pix = int(ymax * img_h), int(xmax * img_w)
+                
                 formatted_detection = {
-                    'box': [float(ymin), float(xmin), float(ymax), float(xmax)],
-                    'class': self.labels[class_id],
+                    'box': [ymin_pix, xmin_pix, ymax_pix, xmax_pix],
+                    'class': self.labels[class_id] if class_id < len(self.labels) else str(class_id),
                     'score': float(confidence)
                 }
                 formatted.append(formatted_detection)
