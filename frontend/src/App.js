@@ -271,7 +271,6 @@ function App() {
       });
 
       socket.on('detections', (data) => {
-        let boundingBox = [data.array]
         setDetections(data);
         if (data.length > 0) {
           const personDetection = data.find(d => d.class === 'person');
@@ -404,7 +403,7 @@ function App() {
                   onError={(e) => console.error('Image failed to load:', e)}
                 />
                 {detections.map((detection, index) => {
-                  const { box, class: className, score } = detection;
+                  const { box, meta } = detection;
                   const [ymin, xmin, ymax, xmax] = box;
                   return (
                     <BoundingBox
