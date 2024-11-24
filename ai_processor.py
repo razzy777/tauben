@@ -199,10 +199,11 @@ class ObjectDetectionUtils:
             print("im here!!!!:")
             output_name = list(input_data.keys())[0]
             output_list = input_data.get(output_name)
+            print("output_list", output_list)
+
             
             if output_list is None or not isinstance(output_list, list):
                 return self._empty_detection_result()
-            print("1111 here!!!!:", output_list)
 
             # Create the formatted array with objects
             formatted_output = []
@@ -212,7 +213,7 @@ class ObjectDetectionUtils:
                         "classId": index,
                         "values": arr.tolist()  # Convert NumPy array to list for better readability
                     })
-            print("2222 here!!!!:", output_list)
+            print("formatted_output", output_list)
             # Check if the new array is empty
             if len(formatted_output) == 0:
                 return self._empty_detection_result()
