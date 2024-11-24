@@ -9,18 +9,21 @@ import base64
 import cv2
 import time
 import logging
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 from functools import partial
 from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm
-from hailo_platform.pyhailort import pyhailort
-
-
 
 class HailoAsyncInference:
-    def __init__(self, hef_path: str, input_queue: queue.Queue, output_queue: queue.Queue, 
-                batch_size: int = 1, input_type: Optional[str] = None, 
-                output_type: Optional[Dict[str, str]] = None, send_original_frame: bool = False) -> None:
-
+    def __init__(
+        self,
+        hef_path: str,
+        input_queue: queue.Queue,
+        output_queue: queue.Queue,
+        batch_size: int = 1,
+        input_type: Optional[str] = None,
+        output_type: Optional[Dict[str, str]] = None,
+        send_original_frame: bool = False
+    ) -> None:
         self.input_queue = input_queue
         self.output_queue = output_queue
         params = VDevice.create_params()
@@ -29,29 +32,20 @@ class HailoAsyncInference:
         self.hef = HEF(hef_path)
         self.target = VDevice(params)
         self.infer_model = self.target.create_infer_model(hef_path)
-        self.infer_model.set_batch_size(batch_size)
-
-        # Always set input to UINT8 first, then convert
-        self.infer_model.input().set_format_type(FormatType.UINT8)
-        self.infer_model.output().set_format_type(FormatType.FLOAT32)
-        self.output_type = output_type
-        self.send_original_frame = send_original_frame
+        
+        # Get and verify input shape
         input_vstream_info = self.hef.get_input_vstream_infos()[0]
         assert input_vstream_info.shape == (640, 640, 3), f"Unexpected model input shape: {input_vstream_info.shape}"
-        
-        self.infer_model.set_batch_size(1)  # Process one frame at a time
-        self.infer_model.input().set_format_type(FormatType.UINT8)  # Keep uint8 format
-        
         print(f"Model configured for input shape {input_vstream_info.shape}")
-
-
-
-
-
-    def preprocess_for_hailo(self, frame: np.ndarray) -> np.ndarray:
-        """No need to convert; assume input is already in uint8 format"""
-        return frame
-
+        
+        # Configure model
+        self.infer_model.set_batch_size(1)
+        self.infer_model.input().set_format_type(FormatType.UINT8)
+        self.infer_model.output().set_format_type(FormatType.FLOAT32)
+        
+        self.output_type = output_type
+        self.send_original_frame = send_original_frame
+        print(f"Available output vstream infos: {[info.name for info in self.hef.get_output_vstream_infos()]}")
 
     def run(self) -> None:
         try:
@@ -68,9 +62,8 @@ class HailoAsyncInference:
 
                     bindings_list = []
                     for frame in preprocessed_batch:
-                        # Convert to uint8
-                        frame_uint8 = self.preprocess_for_hailo(frame)
-                        frame_contiguous = np.ascontiguousarray(frame_uint8)
+                        # Ensure frame is contiguous uint8
+                        frame_contiguous = np.ascontiguousarray(frame, dtype=np.uint8)
                         
                         bindings = self._create_bindings(configured_infer_model)
                         bindings.input().set_buffer(frame_contiguous)
@@ -102,7 +95,6 @@ class HailoAsyncInference:
                         output_buffer = bindings.output(name).get_buffer()
                         if isinstance(output_buffer, list):
                             output_buffer = np.concatenate(output_buffer, axis=0)
-                        # No need to reshape; use the output as is
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
@@ -128,19 +120,20 @@ class ObjectDetectionUtils:
     def __init__(self, labels_path: str, padding_color: tuple = (114, 114, 114)):
         self.labels = self.get_labels(labels_path)
         self.padding_color = padding_color
-        # Find person class index
+        # Find apple class index
         try:
             self.apple_class = self.labels.index('apple')
-            print(f"Person class index: {self.apple_class}")
+            print(f"Apple class index: {self.apple_class}")
         except ValueError:
-            self.apple_class = 0  # Default to 0 if not found
-            print("Warning: 'person' not found in labels, using class index 0")
-        self.confidence_threshold = 0.60  # Adjust as needed
+            self.apple_class = None
+            print("Warning: 'apple' not found in labels")
+        self.confidence_threshold = 0.60
 
     def get_labels(self, labels_path: str) -> list:
         try:
             with open(labels_path, 'r', encoding="utf-8") as f:
                 class_names = f.read().splitlines()
+            print(f"Loaded {len(class_names)} classes from {labels_path}")
             return class_names
         except Exception as e:
             print(f"Error loading labels from {labels_path}: {e}")
@@ -151,70 +144,77 @@ class ObjectDetectionUtils:
         Preprocess image for YOLOv8 inference.
         Expects and maintains 640x640x3 uint8 format.
         """
-        # Input should already be 640x640 from libcamera-vid
-        assert image.shape == (640, 640, 3), f"Expected shape (640, 640, 3), got {image.shape}"
-        
         # Convert BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        # Ensure exact size
+        if image.shape[:2] != (model_h, model_w):
+            image = cv2.resize(image, (model_w, model_h), interpolation=cv2.INTER_LINEAR)
         
         # Ensure contiguous uint8 array
         image = np.ascontiguousarray(image, dtype=np.uint8)
         
         return image
 
-    def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int], model_input_shape: Tuple[int, int]) -> dict:
+    def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         try:
+            # Get output tensor
             output_name = list(input_data.keys())[0]
             output_tensor = input_data.get(output_name)
-
+            
             if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
-            # Reshape the output tensor based on YOLOv8 format
-            # Assuming output shape is [batch, num_boxes, num_classes + 5]
+            # Print output tensor shape and first few values for debugging
+            print(f"Output tensor shape: {output_tensor.shape}")
+            print(f"Output tensor first values: {output_tensor[0][:10]}")  # Show first 10 values
+
+            # Reshape if needed (assuming YOLOv8 output format)
+            if len(output_tensor.shape) == 2:
+                # Reshape to [num_boxes, 85] format (80 classes + 4 box coords + 1 objectness)
+                num_classes = len(self.labels)
+                output_tensor = output_tensor.reshape(-1, num_classes + 5)
+
             boxes = []
             scores = []
             classes = []
-            
-            # Get scaling factors
-            orig_h, orig_w = orig_image_shape
-            input_h, input_w = model_input_shape
-            scale_h = orig_h / input_h
-            scale_w = orig_w / input_w
 
             # Process each detection
             for detection in output_tensor:
-                if detection[4] > self.confidence_threshold:  # obj_conf
+                if len(detection) >= 5:  # Make sure we have enough values
                     class_scores = detection[5:]
-                    class_id = np.argmax(class_scores)
-                    confidence = class_scores[class_id]
-                    
-                    if confidence > self.confidence_threshold and class_id == self.apple_class:
-                        # Get box coordinates
-                        x, y, w, h = detection[0:4]
+                    if len(class_scores) > 0:
+                        class_id = np.argmax(class_scores)
+                        confidence = class_scores[class_id]
                         
-                        # Convert to corner format and scale to original image size
-                        xmin = (x - w/2) * scale_w
-                        ymin = (y - h/2) * scale_h
-                        xmax = (x + w/2) * scale_w
-                        ymax = (y + h/2) * scale_h
-                        
-                        # Clip to image bounds
-                        xmin = max(0, min(xmin, orig_w))
-                        ymin = max(0, min(ymin, orig_h))
-                        xmax = max(0, min(xmax, orig_w))
-                        ymax = max(0, min(ymax, orig_h))
-                        
-                        boxes.append([ymin, xmin, ymax, xmax])
-                        scores.append(confidence)
-                        classes.append(class_id)
+                        if confidence > self.confidence_threshold:
+                            # Get box coordinates (assuming xywh format)
+                            x, y, w, h = detection[:4]
+                            
+                            # Convert to corner format and scale to original image size
+                            img_h, img_w = orig_image_shape
+                            xmin = max(0, min((x - w/2) * img_w, img_w))
+                            ymin = max(0, min((y - h/2) * img_h, img_h))
+                            xmax = max(0, min((x + w/2) * img_w, img_w))
+                            ymax = max(0, min((y + h/2) * img_h, img_h))
+                            
+                            # Only include apple detections if we're looking for apples
+                            if self.apple_class is None or class_id == self.apple_class:
+                                boxes.append([ymin/img_h, xmin/img_w, ymax/img_h, xmax/img_w])
+                                scores.append(float(confidence))
+                                classes.append(int(class_id))
 
-            return {
+            result = {
                 'detection_boxes': boxes,
                 'detection_classes': classes,
                 'detection_scores': scores,
                 'num_detections': len(scores)
             }
+            
+            if result['num_detections'] > 0:
+                print(f"Found {result['num_detections']} detections")
+            
+            return result
 
         except Exception as e:
             print(f"Error extracting detections: {e}")
@@ -230,24 +230,19 @@ class ObjectDetectionUtils:
             'num_detections': 0
         }
 
-    def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> list:
-        """Format person detections for frontend display."""
+    def format_detections_for_frontend(self, detections: dict, image_shape: tuple) -> List[dict]:
+        """Format detections for frontend display."""
         try:
             formatted = []
-            h, w = image_shape[:2]
             
             for i in range(detections['num_detections']):
                 ymin, xmin, ymax, xmax = detections['detection_boxes'][i]
                 confidence = detections['detection_scores'][i]
+                class_id = detections['detection_classes'][i]
                 
                 formatted_detection = {
-                    'box': [
-                        float(ymin) / h,
-                        float(xmin) / w,
-                        float(ymax) / h,
-                        float(xmax) / w
-                    ],
-                    'class': 'apple',  # Always person
+                    'box': [float(ymin), float(xmin), float(ymax), float(xmax)],
+                    'class': self.labels[class_id],
                     'score': float(confidence)
                 }
                 formatted.append(formatted_detection)
@@ -262,7 +257,6 @@ class ObjectDetectionUtils:
 
 class AIProcessor:
     def __init__(self, hef_path: str, labels_path: str, server_url: str = 'http://localhost:3000'):
-        # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('AIProcessor')
         
@@ -279,7 +273,7 @@ class AIProcessor:
             input_queue=self.input_queue,
             output_queue=self.output_queue,
             batch_size=1,
-            input_type='FLOAT32',
+            input_type='UINT8',
             send_original_frame=True
         )
         
@@ -297,9 +291,6 @@ class AIProcessor:
         # Threading control
         self.running = False
         self.inference_thread = None
-        
-        # For frame rate limiting
-        self.last_update_time = 0
 
     def setup_socket_handlers(self):
         @self.sio.event(namespace='/ai')
@@ -317,33 +308,21 @@ class AIProcessor:
             self.process_frame(frame_data)
 
     def decode_frame(self, frame_data: str) -> Optional[np.ndarray]:
-        """Decode base64 frame data into an OpenCV image."""
         try:
             img_data = base64.b64decode(frame_data)
             nparr = np.frombuffer(img_data, np.uint8)
             frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if frame is not None:
-                return frame
-            else:
-                self.logger.error("Error: Frame decoding failed")
-                return None
+            print(f"Decoded frame shape: {frame.shape}, dtype: {frame.dtype}")
+            return frame
         except Exception as e:
             self.logger.error(f"Frame decoding error: {e}")
-            import traceback
-            traceback.print_exc()
             return None
 
     def process_frame(self, frame_data: str):
         try:
-            current_time = time.time()
-            #if current_time - self.last_update_time < 1:
-            #    return
-
             frame = self.decode_frame(frame_data)
             if frame is None:
                 return
-
-            self.last_update_time = current_time  # Update after successful frame decoding
 
             preprocessed_frame = self.utils.preprocess(frame, self.width, self.height)
 
@@ -355,27 +334,15 @@ class AIProcessor:
 
             try:
                 original_frame, outputs = self.output_queue.get(timeout=2.0)
-
                 if outputs:
-                    detections = self.utils.extract_detections(outputs, frame.shape[:2], (self.width, self.height))
-
+                    detections = self.utils.extract_detections(outputs, frame.shape[:2])
                     if detections['num_detections'] > 0:
                         formatted_detections = self.utils.format_detections_for_frontend(
                             detections, frame.shape
                         )
                         if formatted_detections:
-                            # Log detection information
-                            det = formatted_detections[0]
-                            box = det['box']
-                            self.logger.info(
-                                f"Detection: class={det['class']}, score={det['score']:.2f}, box={box}"
-                            )
+                            self.logger.info(f"Sending {len(formatted_detections)} detections")
                             self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
-                    else:
-                        # Less logs when nothing is detected
-                        pass
-                else:
-                    self.logger.info("No outputs received from the inference model.")
 
             except queue.Empty:
                 self.logger.warning("Inference timeout")
@@ -402,6 +369,7 @@ class AIProcessor:
             except Exception as e:
                 self.logger.error(f"Connection failed: {e}")
                 time.sleep(5)
+
 
     def start(self):
         self.running = True
