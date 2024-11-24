@@ -5,7 +5,6 @@ const fs = require('fs');
 const { startVideoStream, stopVideoStream } = require('./camera');
 const servoSystem = require('./servoSystem');
 const { ServoController } = require('./relay');
-const fs = require('fs');
 const cocoLabels = fs.readFileSync('coco.txt', 'utf-8').split('\n');
 
 
