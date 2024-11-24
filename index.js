@@ -267,7 +267,7 @@ aiNamespace.on('connection', (socket) => {
     if (detections.length > 0) {
         let returnObjs = [];
         for (let filteredDetection of detections) {
-            const FILTER_CONFIDENCE = 0.3
+            const FILTER_CONFIDENCE = 0.2
             const FILTER_CLASS = 'apple'
             let boundingBox = filteredDetection.values[0];
             let classId = filteredDetection.classId;
@@ -284,7 +284,7 @@ aiNamespace.on('connection', (socket) => {
                 }
             });
         }
-        if (returnObjs.length > 0 && timer < (new Date().getTime() - 300)) {
+        if (returnObjs.length > 0 && timer < (new Date().getTime() - 100)) {
             frontendNamespace.emit('detections', returnObjs);
         
             const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
