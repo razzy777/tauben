@@ -265,7 +265,7 @@ aiNamespace.on('connection', (socket) => {
     // Broadcast detections to connected frontend clients
     if (detections.length > 0) {
         let returnObjs = [];
-        for (let filteredDetection of filteredDetections) {
+        for (let filteredDetection of detections) {
             let boundingBox = filteredDetection.values[0];
             let classId = filteredDetection.classId;
             // Look up the class name from coco.txt using the classId as index

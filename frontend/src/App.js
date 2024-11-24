@@ -271,7 +271,7 @@ function App() {
       });
 
       socket.on('detections', (data) => {
-        setDetections([data]);
+        setDetections(data);
         if (data.length > 0) {
           const personDetection = data.find(d => d.class === 'person');
           if (personDetection) {
