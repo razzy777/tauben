@@ -268,7 +268,7 @@ aiNamespace.on('connection', (socket) => {
         let returnObjs = [];
         for (let filteredDetection of detections) {
             const FILTER_CONFIDENCE = 0.2
-            const FILTER_CLASS = 'apple'
+            const FILTER_CLASS = 'person'
             let boundingBox = filteredDetection.values[0];
             let classId = filteredDetection.classId;
             // Look up the class name from coco.txt using the classId as index
@@ -284,7 +284,7 @@ aiNamespace.on('connection', (socket) => {
                 }
             });
         }
-        if (returnObjs.length > 0 && timer < (new Date().getTime() - 100)) {
+        if (returnObjs.length > 0 && timer < (new Date().getTime() - 150)) {
             frontendNamespace.emit('detections', returnObjs);
         
             const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
