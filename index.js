@@ -312,8 +312,8 @@ aiNamespace.on('connection', (socket) => {
         
             if (xMultiplier > 0 || yMultiplier > 0) {
                 // Adjust speed based on distance from center
-                const centerSpeed = 5;    // Speed when closer to center
-                const maxSpeed = 10;      // Maximum speed when far from center
+                const centerSpeed = 1;    // Speed when closer to center
+                const maxSpeed = 2;      // Maximum speed when far from center
                 
                 // Calculate speed factor based on distance from center
                 const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
