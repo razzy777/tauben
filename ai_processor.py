@@ -210,8 +210,8 @@ class ObjectDetectionUtils:
                 return self._empty_detection_result()
             
             formatted_output = []
-            print("output_list", output_list)
-
+            class_confidences = {}  # Initialize the dictionary here
+            
             # Handle the nested structure
             for detection_list in output_list:
                 if isinstance(detection_list, list):
@@ -237,9 +237,7 @@ class ObjectDetectionUtils:
             
             if len(formatted_output) == 0:
                 return self._empty_detection_result()
-
-            print("formatted_output", formatted_output)
-            
+                
             return formatted_output
 
         except Exception as e:
@@ -382,7 +380,7 @@ class AIProcessor:
             self.logger.error(f"Frame processing error: {e}")
             import traceback
             traceback.print_exc()
-            
+
     def connect(self):
         while not self.connected:
             try:
