@@ -267,7 +267,7 @@ aiNamespace.on('connection', (socket) => {
     if (detections.length > 0) {
         let returnObjs = [];
         for (let filteredDetection of detections) {
-            const FILTER_CONFIDENCE = 0.2
+            const FILTER_CONFIDENCE = 0.3
             const FILTER_CLASS = 'person'
             let boundingBox = filteredDetection.values[0];
             let classId = filteredDetection.classId;
@@ -286,32 +286,45 @@ aiNamespace.on('connection', (socket) => {
         }
         if (returnObjs.length > 0 && timer < (new Date().getTime() - 150)) {
             frontendNamespace.emit('detections', returnObjs);
-        
+
             const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
-            const centerX = (xmin + xmax) / 2;
-            const centerY = (ymin + ymax) / 2;
+            
+            // Check if the center point (0.5, 0.5) is within the bounding box
+            const isCenterCovered = (
+                0.5 >= xmin && 
+                0.5 <= xmax && 
+                0.5 >= ymin && 
+                0.5 <= ymax
+            );
         
-            // Calculate distance from center (0 to 1)
-            const deltaX = (centerX - 0.5) * 2;
-            const deltaY = (centerY - 0.5) * 2;
-            
-            // Define single threshold for near/far
-            const centerThreshold = 0.2;  // 20% from center
-            
-            // Only move if not in dead center (5% threshold)
-            const deadZone = 0.05;
-            if (Math.abs(deltaX) > deadZone || Math.abs(deltaY) > deadZone) {
+            // Only move if center is not covered by the box
+            if (!isCenterCovered) {
+                const centerX = (xmin + xmax) / 2;
+                const centerY = (ymin + ymax) / 2;
+        
+                // Calculate distance from center (0 to 1)
+                const deltaX = (centerX - 0.5) * 2;
+                const deltaY = (centerY - 0.5) * 2;
+                
+                // Define threshold for near/far
+                const centerThreshold = 0.2;  // 20% from center
+                const mediumThreshold = 0.4;  // 20% from center
+
+                
                 // Determine speed for each axis
-                const xSpeed = Math.abs(deltaX) > centerThreshold ? 3 : 2;
-                const ySpeed = Math.abs(deltaY) > centerThreshold ? 3 : 2;
+                const xSpeed = Math.abs(deltaX) > centerThreshold ?  Math.abs(deltaX) > mediumThreshold ? 4 : 2 : 1;
+                const ySpeed = Math.abs(deltaY) > centerThreshold ?  Math.abs(deltaY) > mediumThreshold ? 4 : 2 : 1;
         
-                const panMovement = -Math.sign(deltaX) * xSpeed;    // Just use direction (-1, 1) * speed
+                const panMovement = -Math.sign(deltaX) * xSpeed;
                 const tiltMovement = -Math.sign(deltaY) * ySpeed;   // Negative for Y reversal
                 timer = new Date().getTime()
+
                 servoSystem.moveToPositionRelative(panMovement, tiltMovement);
             }
+        
         }
     }    
+
     
     // Implement logic to move servos based on detections
     /*if (detections && detections.length > 0) {
