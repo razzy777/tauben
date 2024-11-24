@@ -261,6 +261,7 @@ aiNamespace.on('connection', (socket) => {
 
   socket.on('aiDetections', (detections) => {
     // Broadcast detections to connected frontend clients
+    console.log('here are the detections', detections)
     frontendNamespace.emit('detections', detections);
 
     // Implement logic to move servos based on detections
