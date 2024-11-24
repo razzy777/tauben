@@ -290,13 +290,25 @@ aiNamespace.on('connection', (socket) => {
             const centerX = (xmin + xmax) / 2;
             const centerY = (ymin + ymax) / 2;
         
-            const deltaX = (centerX - 0.5) * 2;
-            const deltaY = (centerY - 0.5) * 2;
+            // Define a "dead zone" in the center where no movement is needed
+            const deadZoneSize = 0.2; // This creates a 20% zone in the center where no movement occurs
+            const isInDeadZoneX = Math.abs(centerX - 0.5) < deadZoneSize/2;
+            const isInDeadZoneY = Math.abs(centerY - 0.5) < deadZoneSize/2;
         
-            const panMovement = -deltaX * 5;
-            const tiltMovement = deltaY * 5;
-    
-            servoSystem.moveToPositionRelative(panMovement, tiltMovement);    
+            // Only move if outside the dead zone
+            if (!isInDeadZoneX || !isInDeadZoneY) {
+                const deltaX = (centerX - 0.5) * 2;
+                const deltaY = (centerY - 0.5) * 2;
+                
+                // Calculate movements, but with reduced speed when closer to center
+                const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                const speedFactor = Math.min(5, Math.max(1, distanceFromCenter * 5));
+        
+                const panMovement = -deltaX * speedFactor;
+                const tiltMovement = deltaY * speedFactor;
+        
+                servoSystem.moveToPositionRelative(panMovement, tiltMovement);
+            }
         }
     }    
     
