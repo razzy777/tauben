@@ -121,10 +121,10 @@ class HailoAsyncInference:
                             for idx, item in enumerate(output_buffer):
                                 if isinstance(item, np.ndarray):
                                     print(f"  Item {idx}: shape={item.shape}, dtype={item.dtype}")
-                                    print(f"  Values: {item}")
+                                    #print(f"  Values: {item}")
                                 else:
                                     print(f"  Item {idx}: type={type(item)}")
-                                    print(f"  Values: {item}")
+                                    #print(f"  Values: {item}")
                         
                         # Convert list to numpy array if needed
                         if isinstance(output_buffer, list):
@@ -196,11 +196,16 @@ class ObjectDetectionUtils:
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         try:
+            print("im here!!!!:")
             output_name = list(input_data.keys())[0]
             output_list = input_data.get(output_name)
             
             if (output_list is None or not isinstance(output_list, list) or len(output_list) == 0):
                 return self._empty_detection_result()
+            print("1212 here!!!!:")
+            print("1212 here!!!!:", output_list)
+
+
             
             # Access the nested list containing class detections
             detections_per_class = output_list[0]
