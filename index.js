@@ -284,7 +284,7 @@ aiNamespace.on('connection', (socket) => {
                 }
             });
         }
-        if (returnObjs.length > 0 && timer < (new Date().getTime() - 1000)) {
+        if (returnObjs.length > 0 && timer < (new Date().getTime() - 500)) {
             frontendNamespace.emit('detections', returnObjs);
         
             const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
@@ -302,8 +302,8 @@ aiNamespace.on('connection', (socket) => {
             const deadZone = 0.05;
             if (Math.abs(deltaX) > deadZone || Math.abs(deltaY) > deadZone) {
                 // Determine speed for each axis
-                const xSpeed = Math.abs(deltaX) > centerThreshold ? 2 : 1;
-                const ySpeed = Math.abs(deltaY) > centerThreshold ? 2 : 1;
+                const xSpeed = Math.abs(deltaX) > centerThreshold ? 3 : 2;
+                const ySpeed = Math.abs(deltaY) > centerThreshold ? 3 : 2;
         
                 const panMovement = -Math.sign(deltaX) * xSpeed;    // Just use direction (-1, 1) * speed
                 const tiltMovement = -Math.sign(deltaY) * ySpeed;   // Negative for Y reversal
