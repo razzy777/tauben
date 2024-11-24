@@ -261,15 +261,20 @@ aiNamespace.on('connection', (socket) => {
 
   socket.on('aiDetections', (detections) => {
     // Broadcast detections to connected frontend clients
-    console.log('here are the detections', detections)
-    frontendNamespace.emit('detections', detections);
+    console.log('here are the detections', detections[0].values)
+    let APPLE_CLASS_ID = 47
+    let detections = detections.filter(x => x.classId == APPLE_CLASS_ID)
+    if (detections.length > 0){
+        let boundingBox = detections[0].values
+        frontendNamespace.emit('detections', boundingBox);
+    }
 
     // Implement logic to move servos based on detections
-    if (detections && detections.length > 0) {
+    /*if (detections && detections.length > 0) {
       const personDetection = detections[0];  // Using the first detected person
      //box=[0.703125, 0.3421875, 0.75, 0.390625]
       adjustServosToFollow(personDetection.box);
-    }
+    }*/
   });
 
   socket.on('disconnect', () => {

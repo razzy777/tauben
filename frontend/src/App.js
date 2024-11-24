@@ -271,6 +271,7 @@ function App() {
       });
 
       socket.on('detections', (data) => {
+        let boundingBox = [data.array]
         setDetections(data);
         if (data.length > 0) {
           const personDetection = data.find(d => d.class === 'person');
