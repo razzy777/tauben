@@ -46,6 +46,25 @@ class HailoAsyncInference:
         self.output_type = output_type
         self.send_original_frame = send_original_frame
         print(f"Available output vstream infos: {[info.name for info in self.hef.get_output_vstream_infos()]}")
+        print("\nModel Information:")
+        print("Input Streams:")
+        for info in self.hef.get_input_vstream_infos():
+            print(f"- Name: {info.name}")
+            print(f"- Shape: {info.shape}")
+            print(f"- Format: {info.format}")
+        
+        print("\nOutput Streams:")
+        for info in self.hef.get_output_vstream_infos():
+            print(f"- Name: {info.name}")
+            print(f"- Shape: {info.shape}")
+            print(f"- Format: {info.format}")
+        
+        # Get output configuration
+        output_info = self.hef.get_output_vstream_infos()[0]
+        self.output_shape = output_info.shape
+        print(f"\nOutput shape: {self.output_shape}")
+
+
 
     def run(self) -> None:
         try:
@@ -93,6 +112,12 @@ class HailoAsyncInference:
                     output_data = {}
                     for name in bindings._output_names:
                         output_buffer = bindings.output(name).get_buffer()
+                        print(f"\nOutput buffer info:")
+                        print(f"- Name: {name}")
+                        print(f"- Shape: {output_buffer.shape}")
+                        print(f"- Type: {output_buffer.dtype}")
+                        print(f"- Min/Max values: {output_buffer.min():.4f}, {output_buffer.max():.4f}")
+                        
                         if isinstance(output_buffer, list):
                             output_buffer = np.concatenate(output_buffer, axis=0)
                         output_data[name] = output_buffer
