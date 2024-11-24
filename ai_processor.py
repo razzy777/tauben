@@ -11,7 +11,9 @@ import time
 import logging
 from typing import Optional, Tuple, Dict
 from functools import partial
-from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm, postprocess
+from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm
+from hailo_platform.pyhailort import pyhailort
+
 
 
 class HailoAsyncInference:
@@ -174,41 +176,51 @@ class ObjectDetectionUtils:
             if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
-            # Use Hailo's post-processing function for YOLOv8
-            detections = postprocess.yolov8_postprocess(
-                outputs=output_tensor,
-                orig_img_dims=orig_image_shape,
-                input_resize_dims=model_input_shape,
-                nms_iou_thresh=0.45,
-                nms_conf_thresh=self.confidence_threshold,
-                num_classes=len(self.labels)
-            )
-
+            # Reshape the output tensor based on YOLOv8 format
+            # Assuming output shape is [batch, num_boxes, num_classes + 5]
             boxes = []
             scores = []
             classes = []
+            
+            # Get scaling factors
+            orig_h, orig_w = orig_image_shape
+            input_h, input_w = model_input_shape
+            scale_h = orig_h / input_h
+            scale_w = orig_w / input_w
 
-            # Filter detections for 'apple' class
-            for det in detections:
-                class_id = det.class_id
-                if self.labels[class_id] == 'apple':
-                    boxes.append([det.ymin, det.xmin, det.ymax, det.xmax])
-                    scores.append(det.confidence)
-                    classes.append(class_id)
+            # Process each detection
+            for detection in output_tensor:
+                if detection[4] > self.confidence_threshold:  # obj_conf
+                    class_scores = detection[5:]
+                    class_id = np.argmax(class_scores)
+                    confidence = class_scores[class_id]
+                    
+                    if confidence > self.confidence_threshold and class_id == self.apple_class:
+                        # Get box coordinates
+                        x, y, w, h = detection[0:4]
+                        
+                        # Convert to corner format and scale to original image size
+                        xmin = (x - w/2) * scale_w
+                        ymin = (y - h/2) * scale_h
+                        xmax = (x + w/2) * scale_w
+                        ymax = (y + h/2) * scale_h
+                        
+                        # Clip to image bounds
+                        xmin = max(0, min(xmin, orig_w))
+                        ymin = max(0, min(ymin, orig_h))
+                        xmax = max(0, min(xmax, orig_w))
+                        ymax = max(0, min(ymax, orig_h))
+                        
+                        boxes.append([ymin, xmin, ymax, xmax])
+                        scores.append(confidence)
+                        classes.append(class_id)
 
-            num_detections = len(scores)
-
-            if num_detections > 0:
-                result = {
-                    'detection_boxes': boxes,
-                    'detection_classes': classes,
-                    'detection_scores': scores,
-                    'num_detections': num_detections
-                }
-            else:
-                result = self._empty_detection_result()
-
-            return result
+            return {
+                'detection_boxes': boxes,
+                'detection_classes': classes,
+                'detection_scores': scores,
+                'num_detections': len(scores)
+            }
 
         except Exception as e:
             print(f"Error extracting detections: {e}")
