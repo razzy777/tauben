@@ -43,6 +43,13 @@ class HailoAsyncInference:
         self.output_type = output_type
         self.send_original_frame = send_original_frame
         print(f"Available output vstream infos: {[info.name for info in self.hef.get_output_vstream_infos()]}")
+        print("Input shape info:")
+        for info in self.hef.get_input_vstream_infos():
+            print(f"- Name: {info.name}")
+            print(f"- Shape: {info.shape}")
+            print(f"- Format: {info.format}")
+
+
 
 
     def preprocess_for_hailo(self, frame: np.ndarray) -> np.ndarray:
