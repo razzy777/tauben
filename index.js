@@ -265,8 +265,8 @@ aiNamespace.on('connection', (socket) => {
     let APPLE_CLASS_ID = 47
     let filteredDetections = detections.filter(x => x.classId == APPLE_CLASS_ID)
     if (filteredDetections.length > 0){
-        let boundingBox = filteredDetections[0].values
-        frontendNamespace.emit('detections', boundingBox);
+        let boundingBox = filteredDetections[0].values[0]
+        //frontendNamespace.emit('detections', boundingBox);
     }
 
     // Implement logic to move servos based on detections
