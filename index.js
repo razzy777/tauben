@@ -5,6 +5,9 @@ const fs = require('fs');
 const { startVideoStream, stopVideoStream } = require('./camera');
 const servoSystem = require('./servoSystem');
 const { ServoController } = require('./relay');
+const fs = require('fs');
+const cocoLabels = fs.readFileSync('coco.txt', 'utf-8').split('\n');
+
 
 // Create the relay controller
 const relayController = new ServoController(588); // Replace with the appropriate pin number
@@ -261,14 +264,26 @@ aiNamespace.on('connection', (socket) => {
 
   socket.on('aiDetections', (detections) => {
     // Broadcast detections to connected frontend clients
-    console.log('here are the detections', detections[0].values)
-    let APPLE_CLASS_ID = 47
-    let filteredDetections = detections.filter(x => x.classId == APPLE_CLASS_ID)
-    if (filteredDetections.length > 0){
-        let boundingBox = filteredDetections[0].values[0]
-        frontendNamespace.emit('detections', {box: boundingBox, meta: {classId: filteredDetections[0].classId, confidence: boundingBox[4]}});
+    if (detections.length > 0) {
+        let returnObjs = [];
+        for (let filteredDetection of filteredDetections) {
+            let boundingBox = filteredDetection.values[0];
+            let classId = filteredDetection.classId;
+            // Look up the class name from coco.txt using the classId as index
+            let className = cocoLabels[classId] || `Unknown (${classId})`;
+            
+            returnObjs.push({
+                box: boundingBox,
+                meta: {
+                    className,
+                    classId,  // Optional: include the original classId if needed
+                    confidence: boundingBox[4]
+                }
+            });
+        }
+        frontendNamespace.emit('detections', returnObjs);
     }
-
+    
     // Implement logic to move servos based on detections
     /*if (detections && detections.length > 0) {
       const personDetection = detections[0];  // Using the first detected person
