@@ -165,44 +165,48 @@ class ObjectDetectionUtils:
             if output_tensor is None or output_tensor.size == 0:
                 return self._empty_detection_result()
 
-            # Print output tensor shape and first few values for debugging
             print(f"Output tensor shape: {output_tensor.shape}")
-            print(f"Output tensor first values: {output_tensor[0][:10]}")  # Show first 10 values
-
-            # Reshape if needed (assuming YOLOv8 output format)
-            if len(output_tensor.shape) == 2:
-                # Reshape to [num_boxes, 85] format (80 classes + 4 box coords + 1 objectness)
-                num_classes = len(self.labels)
-                output_tensor = output_tensor.reshape(-1, num_classes + 5)
-
+            
+            # The output seems to be already processed boxes
+            # Each row appears to be: [x_center, y_center, width, height, confidence]
             boxes = []
             scores = []
             classes = []
 
-            # Process each detection
-            for detection in output_tensor:
-                if len(detection) >= 5:  # Make sure we have enough values
-                    class_scores = detection[5:]
-                    if len(class_scores) > 0:
-                        class_id = np.argmax(class_scores)
-                        confidence = class_scores[class_id]
+            # If output is 2D array with multiple detections
+            if len(output_tensor.shape) == 2:
+                detections = output_tensor
+            # If output is 1D array with a single detection
+            elif len(output_tensor.shape) == 1:
+                detections = output_tensor.reshape(1, -1)
+            else:
+                print(f"Unexpected output tensor shape: {output_tensor.shape}")
+                return self._empty_detection_result()
+
+            for detection in detections:
+                if len(detection) >= 5:  # Make sure we have box coordinates and confidence
+                    confidence = detection[4]
+                    
+                    if confidence > self.confidence_threshold:
+                        # Get normalized box coordinates
+                        x_center, y_center = detection[0], detection[1]
+                        width, height = detection[2], detection[3]
                         
-                        if confidence > self.confidence_threshold:
-                            # Get box coordinates (assuming xywh format)
-                            x, y, w, h = detection[:4]
-                            
-                            # Convert to corner format and scale to original image size
-                            img_h, img_w = orig_image_shape
-                            xmin = max(0, min((x - w/2) * img_w, img_w))
-                            ymin = max(0, min((y - h/2) * img_h, img_h))
-                            xmax = max(0, min((x + w/2) * img_w, img_w))
-                            ymax = max(0, min((y + h/2) * img_h, img_h))
-                            
-                            # Only include apple detections if we're looking for apples
-                            if self.apple_class is None or class_id == self.apple_class:
-                                boxes.append([ymin/img_h, xmin/img_w, ymax/img_h, xmax/img_w])
-                                scores.append(float(confidence))
-                                classes.append(int(class_id))
+                        # Convert to corner format (still normalized)
+                        xmin = x_center - width/2
+                        ymin = y_center - height/2
+                        xmax = x_center + width/2
+                        ymax = y_center + height/2
+                        
+                        # Clip to [0, 1] range
+                        xmin = max(0.0, min(xmin, 1.0))
+                        ymin = max(0.0, min(ymin, 1.0))
+                        xmax = max(0.0, min(xmax, 1.0))
+                        ymax = max(0.0, min(ymax, 1.0))
+                        
+                        boxes.append([ymin, xmin, ymax, xmax])
+                        scores.append(float(confidence))
+                        classes.append(0)  # Assuming single class detection
 
             result = {
                 'detection_boxes': boxes,
@@ -212,7 +216,7 @@ class ObjectDetectionUtils:
             }
             
             if result['num_detections'] > 0:
-                print(f"Found {result['num_detections']} detections")
+                print(f"Found {result['num_detections']} detections with confidences: {scores}")
             
             return result
 
