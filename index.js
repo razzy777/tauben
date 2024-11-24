@@ -285,7 +285,7 @@ aiNamespace.on('connection', (socket) => {
         }
         frontendNamespace.emit('detections', returnObjs);
 
-        const [ymin, xmin, ymax, xmax] = returnObjs.box;
+        const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
         const centerX = (xmin + xmax) / 2;
         const centerY = (ymin + ymax) / 2;
     
