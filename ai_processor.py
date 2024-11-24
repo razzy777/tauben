@@ -114,12 +114,25 @@ class HailoAsyncInference:
                         output_buffer = bindings.output(name).get_buffer()
                         print(f"\nOutput buffer info:")
                         print(f"- Name: {name}")
-                        print(f"- Shape: {output_buffer.shape}")
-                        print(f"- Type: {output_buffer.dtype}")
-                        print(f"- Min/Max values: {output_buffer.min():.4f}, {output_buffer.max():.4f}")
                         
                         if isinstance(output_buffer, list):
-                            output_buffer = np.concatenate(output_buffer, axis=0)
+                            print(f"- List length: {len(output_buffer)}")
+                            print("- Content:")
+                            for idx, item in enumerate(output_buffer):
+                                if isinstance(item, np.ndarray):
+                                    print(f"  Item {idx}: shape={item.shape}, dtype={item.dtype}")
+                                    print(f"  Values: {item}")
+                                else:
+                                    print(f"  Item {idx}: type={type(item)}")
+                                    print(f"  Values: {item}")
+                        
+                        # Convert list to numpy array if needed
+                        if isinstance(output_buffer, list):
+                            try:
+                                output_buffer = np.array(output_buffer)
+                            except Exception as e:
+                                print(f"Could not convert to numpy array: {e}")
+                        
                         output_data[name] = output_buffer
                     self.output_queue.put((input_batch[i], output_data))
                 except Exception as e:
@@ -183,55 +196,43 @@ class ObjectDetectionUtils:
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int]) -> dict:
         try:
-            # Get output tensor
             output_name = list(input_data.keys())[0]
-            output_tensor = input_data.get(output_name)
+            output_list = input_data.get(output_name)
             
-            if output_tensor is None or output_tensor.size == 0:
+            if not output_list or not isinstance(output_list, (list, np.ndarray)):
                 return self._empty_detection_result()
 
-            print(f"Output tensor shape: {output_tensor.shape}")
-            
-            # The output seems to be already processed boxes
-            # Each row appears to be: [x_center, y_center, width, height, confidence]
+            print("\nProcessing detections:")
+            print(f"Number of detections: {len(output_list)}")
+
             boxes = []
             scores = []
             classes = []
 
-            # If output is 2D array with multiple detections
-            if len(output_tensor.shape) == 2:
-                detections = output_tensor
-            # If output is 1D array with a single detection
-            elif len(output_tensor.shape) == 1:
-                detections = output_tensor.reshape(1, -1)
-            else:
-                print(f"Unexpected output tensor shape: {output_tensor.shape}")
-                return self._empty_detection_result()
-
-            for detection in detections:
-                if len(detection) >= 5:  # Make sure we have box coordinates and confidence
-                    confidence = detection[4]
-                    
-                    if confidence > self.confidence_threshold:
-                        # Get normalized box coordinates
-                        x_center, y_center = detection[0], detection[1]
-                        width, height = detection[2], detection[3]
+            # Process each detection in the list
+            for detection in output_list:
+                if isinstance(detection, np.ndarray):
+                    # Assuming format: [x1, y1, x2, y2, confidence, class_id]
+                    if len(detection) >= 6:
+                        confidence = detection[4]
+                        class_id = int(detection[5])
                         
-                        # Convert to corner format (still normalized)
-                        xmin = x_center - width/2
-                        ymin = y_center - height/2
-                        xmax = x_center + width/2
-                        ymax = y_center + height/2
-                        
-                        # Clip to [0, 1] range
-                        xmin = max(0.0, min(xmin, 1.0))
-                        ymin = max(0.0, min(ymin, 1.0))
-                        xmax = max(0.0, min(xmax, 1.0))
-                        ymax = max(0.0, min(ymax, 1.0))
-                        
-                        boxes.append([ymin, xmin, ymax, xmax])
-                        scores.append(float(confidence))
-                        classes.append(0)  # Assuming single class detection
+                        if confidence > self.confidence_threshold:
+                            # Get coordinates
+                            x1, y1, x2, y2 = detection[:4]
+                            
+                            # Normalize coordinates if they aren't already
+                            img_h, img_w = orig_image_shape
+                            if x1 > 1 or y1 > 1 or x2 > 1 or y2 > 1:
+                                x1, x2 = x1/img_w, x2/img_w
+                                y1, y2 = y1/img_h, y2/img_h
+                            
+                            boxes.append([y1, x1, y2, x2])
+                            scores.append(float(confidence))
+                            classes.append(class_id)
+                            
+                            print(f"Found detection: class={class_id}, conf={confidence:.3f}, "
+                                f"box=[{x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f}]")
 
             result = {
                 'detection_boxes': boxes,
@@ -239,9 +240,6 @@ class ObjectDetectionUtils:
                 'detection_scores': scores,
                 'num_detections': len(scores)
             }
-            
-            if result['num_detections'] > 0:
-                print(f"Found {result['num_detections']} detections with confidences: {scores}")
             
             return result
 
