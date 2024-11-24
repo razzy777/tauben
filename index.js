@@ -321,7 +321,7 @@ aiNamespace.on('connection', (socket) => {
         
                 const panMovement = -deltaX * speedFactor * xMultiplier;
                 const tiltMovement = -deltaY * speedFactor * yMultiplier;  // Negative here to reverse Y movement
-        
+                console.log('PAN MOVEMENT', panMovement, ' tiltMovement', tiltMovement)
                 servoSystem.moveToPositionRelative(panMovement, tiltMovement);
             }
         }
