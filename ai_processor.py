@@ -199,40 +199,41 @@ class ObjectDetectionUtils:
             output_name = list(input_data.keys())[0]
             output_list = input_data.get(output_name)
             
-            if not output_list or not isinstance(output_list, (list, np.ndarray)):
+            if output_list is None or not isinstance(output_list, (list, np.ndarray)):
+                return self._empty_detection_result()
+            if isinstance(output_list, list) and len(output_list) == 0:
+                return self._empty_detection_result()
+            if isinstance(output_list, np.ndarray) and output_list.size == 0:
                 return self._empty_detection_result()
 
             print("\nProcessing detections:")
-            print(f"Number of detections: {len(output_list)}")
+            print(f"Number of detection classes: {len(output_list)}")
 
             boxes = []
             scores = []
             classes = []
 
-            # Process each detection in the list
-            for detection in output_list:
-                if isinstance(detection, np.ndarray):
-                    # Assuming format: [x1, y1, x2, y2, confidence, class_id]
-                    if len(detection) >= 6:
-                        confidence = detection[4]
-                        class_id = int(detection[5])
-                        
-                        if confidence > self.confidence_threshold:
-                            # Get coordinates
-                            x1, y1, x2, y2 = detection[:4]
+            # Loop over each class's detections
+            for class_id, detection_array in enumerate(output_list):
+                if isinstance(detection_array, np.ndarray) and detection_array.size > 0:
+                    for detection in detection_array:
+                        # Assuming format: [x1, y1, x2, y2, confidence]
+                        if len(detection) >= 5:
+                            x1, y1, x2, y2, confidence = detection[:5]
                             
-                            # Normalize coordinates if they aren't already
-                            img_h, img_w = orig_image_shape
-                            if x1 > 1 or y1 > 1 or x2 > 1 or y2 > 1:
-                                x1, x2 = x1/img_w, x2/img_w
-                                y1, y2 = y1/img_h, y2/img_h
-                            
-                            boxes.append([y1, x1, y2, x2])
-                            scores.append(float(confidence))
-                            classes.append(class_id)
-                            
-                            print(f"Found detection: class={class_id}, conf={confidence:.3f}, "
-                                f"box=[{x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f}]")
+                            if confidence > self.confidence_threshold:
+                                # Normalize coordinates if they aren't already
+                                img_h, img_w = orig_image_shape
+                                if x1 > 1 or y1 > 1 or x2 > 1 or y2 > 1:
+                                    x1, x2 = x1 / img_w, x2 / img_w
+                                    y1, y2 = y1 / img_h, y2 / img_h
+                                
+                                boxes.append([y1, x1, y2, x2])
+                                scores.append(float(confidence))
+                                classes.append(class_id)
+                                
+                                print(f"Found detection: class={class_id}, conf={confidence:.3f}, "
+                                    f"box=[{x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f}]")
 
             result = {
                 'detection_boxes': boxes,
