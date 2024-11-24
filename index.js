@@ -26,6 +26,7 @@ const io = socketIo(server, {
   perMessageDeflate: false
 
 });
+let timer = 0
 
 // Create namespaces
 const frontendNamespace = io.of('/frontend');
@@ -283,7 +284,7 @@ aiNamespace.on('connection', (socket) => {
                 }
             });
         }
-        if (returnObjs.length > 0) {
+        if (returnObjs.length > 0 && timer < (new Date().getTime() - 1000)) {
             frontendNamespace.emit('detections', returnObjs);
         
             const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
@@ -306,7 +307,7 @@ aiNamespace.on('connection', (socket) => {
         
                 const panMovement = -Math.sign(deltaX) * xSpeed;    // Just use direction (-1, 1) * speed
                 const tiltMovement = -Math.sign(deltaY) * ySpeed;   // Negative for Y reversal
-        
+                timer = new Date().getTime()
                 servoSystem.moveToPositionRelative(panMovement, tiltMovement);
             }
         }
