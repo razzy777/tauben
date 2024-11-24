@@ -285,32 +285,47 @@ aiNamespace.on('connection', (socket) => {
         }
         if (returnObjs.length > 0) {
             frontendNamespace.emit('detections', returnObjs);
-
+        
             const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
             const centerX = (xmin + xmax) / 2;
             const centerY = (ymin + ymax) / 2;
         
-            // Define a "dead zone" in the center where no movement is needed
-            const deadZoneSize = 0.2; // This creates a 20% zone in the center where no movement occurs
-            const isInDeadZoneX = Math.abs(centerX - 0.5) < deadZoneSize/2;
-            const isInDeadZoneY = Math.abs(centerY - 0.5) < deadZoneSize/2;
+            // Calculate distance from center (0 to 1)
+            const deltaX = (centerX - 0.5) * 2;
+            const deltaY = (centerY - 0.5) * 2;  // No need to reverse here, we'll reverse in movement
+            
+            // Define thresholds
+            const innerDeadZone = 0.1;  // No movement zone
+            const outerDeadZone = 0.3;  // Full movement zone
+            
+            // Calculate movement multipliers with smooth transition
+            const getMovementMultiplier = (delta) => {
+                const absDelta = Math.abs(delta);
+                if (absDelta < innerDeadZone) return 0;
+                if (absDelta > outerDeadZone) return 1;
+                // Smooth transition between dead zone and full movement
+                return (absDelta - innerDeadZone) / (outerDeadZone - innerDeadZone);
+            };
         
-            // Only move if outside the dead zone
-            if (!isInDeadZoneX || !isInDeadZoneY) {
-                const deltaX = (centerX - 0.5) * 2;
-                const deltaY = (centerY - 0.5) * 2;
+            const xMultiplier = getMovementMultiplier(deltaX);
+            const yMultiplier = getMovementMultiplier(deltaY);
+        
+            if (xMultiplier > 0 || yMultiplier > 0) {
+                // Adjust speed based on distance from center
+                const centerSpeed = 5;    // Speed when closer to center
+                const maxSpeed = 10;      // Maximum speed when far from center
                 
-                // Calculate movements, but with reduced speed when closer to center
+                // Calculate speed factor based on distance from center
                 const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                const speedFactor = Math.min(5, Math.max(1, distanceFromCenter * 5));
+                const speedFactor = distanceFromCenter > outerDeadZone ? maxSpeed : centerSpeed;
         
-                const panMovement = -deltaX * speedFactor;
-                const tiltMovement = deltaY * speedFactor;
+                const panMovement = -deltaX * speedFactor * xMultiplier;
+                const tiltMovement = -deltaY * speedFactor * yMultiplier;  // Negative here to reverse Y movement
         
                 servoSystem.moveToPositionRelative(panMovement, tiltMovement);
             }
         }
-    }    
+   }    
     
     // Implement logic to move servos based on detections
     /*if (detections && detections.length > 0) {
