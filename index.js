@@ -283,19 +283,21 @@ aiNamespace.on('connection', (socket) => {
                 }
             });
         }
-        frontendNamespace.emit('detections', returnObjs);
+        if (returnObjs.length > 0) {
+            frontendNamespace.emit('detections', returnObjs);
 
-        const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
-        const centerX = (xmin + xmax) / 2;
-        const centerY = (ymin + ymax) / 2;
+            const [ymin, xmin, ymax, xmax] = returnObjs[0].box;
+            const centerX = (xmin + xmax) / 2;
+            const centerY = (ymin + ymax) / 2;
+        
+            const deltaX = (centerX - 0.5) * 2;
+            const deltaY = (centerY - 0.5) * 2;
+        
+            const panMovement = -deltaX * 5;
+            const tiltMovement = deltaY * 5;
     
-        const deltaX = (centerX - 0.5) * 2;
-        const deltaY = (centerY - 0.5) * 2;
-    
-        const panMovement = -deltaX * 5;
-        const tiltMovement = deltaY * 5;
-
-        servoSystem.moveToPositionRelative(panMovement, tiltMovement);
+            servoSystem.moveToPositionRelative(panMovement, tiltMovement);    
+        }
     }    
     
     // Implement logic to move servos based on detections
