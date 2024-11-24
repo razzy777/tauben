@@ -204,7 +204,7 @@ class ObjectDetectionUtils:
             
             if output_list is None or not isinstance(output_list, list):
                 return self._empty_detection_result()
-
+            print("99999999   im here!!!!:")
             # Create the formatted array with objects
             formatted_output = []
             for index, arr in enumerate(output_list):
