@@ -317,8 +317,8 @@ aiNamespace.on('connection', (socket) => {
                 const xSpeed = Math.abs(deltaX) > centerThreshold ?  Math.abs(deltaX) > mediumThreshold ? 4 : 2 : 1;
                 const ySpeed = Math.abs(deltaY) > centerThreshold ?  Math.abs(deltaY) > mediumThreshold ? 4 : 2 : 1;
         
-                const panMovement = -Math.sign(deltaX) * FULL_SPEED ? 10 : xSpeed;
-                const tiltMovement = -Math.sign(deltaY) * FULL_SPEED ? 10 : ySpeed;   // Negative for Y reversal
+                const panMovement = -Math.sign(deltaX) * (FULL_SPEED ? 10 : xSpeed);
+                const tiltMovement = -Math.sign(deltaY) * (FULL_SPEED ? 10 : ySpeed);   // Negative for Y reversal
                 timer = new Date().getTime()
 
                 servoSystem.moveToPositionRelative(panMovement, tiltMovement);
