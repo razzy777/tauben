@@ -210,6 +210,8 @@ class ObjectDetectionUtils:
                 return self._empty_detection_result()
             
             formatted_output = []
+            print("output_list", output_list)
+
             # Handle the nested structure
             for detection_list in output_list:
                 if isinstance(detection_list, list):
