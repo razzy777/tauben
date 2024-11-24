@@ -207,7 +207,12 @@ class ObjectDetectionUtils:
             if (
                 output_list is None 
                 or not isinstance(output_list, list) 
-                or all(isinstance(arr, np.ndarray) and arr.size == 0 for arr in output_list)
+                or all(
+                    isinstance(arr, np.ndarray) and arr.size == 0 
+                    if isinstance(arr, np.ndarray) 
+                    else True  # Treat non-array items as "empty"
+                    for arr in output_list
+                )
             ):
                 return self._empty_detection_result()
             print("999 here!!!!:")
