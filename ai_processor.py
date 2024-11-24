@@ -203,25 +203,22 @@ class ObjectDetectionUtils:
                 return self._empty_detection_result()
             
             # Access the nested list containing class detections
-            output_list = output_list[0]
+            detections_per_class = output_list[0]
 
-            if not isinstance(output_list, list):
+            if not isinstance(detections_per_class, list):
                 return self._empty_detection_result()
 
             print("\nProcessing detections:")
-            print(f"Number of detection classes: {len(output_list)}")
-            print(f"output_list type: {type(output_list)}")
-            print(f"output_list length: {len(output_list)}")
-            print(f"First item type: {type(output_list[0]) if len(output_list) > 0 else 'N/A'}")
-
+            print(f"Number of detection classes: {len(detections_per_class)}")
 
             boxes = []
             scores = []
             classes = []
 
             # Loop over each class's detections
-            for class_id, detection_array in enumerate(output_list):
+            for class_id, detection_array in enumerate(detections_per_class):
                 if isinstance(detection_array, np.ndarray) and detection_array.size > 0:
+                    print(f"Detections for class ID {class_id} ({self.labels[class_id] if class_id < len(self.labels) else 'Unknown'}):")
                     for detection in detection_array:
                         # Assuming format: [x1, y1, x2, y2, confidence]
                         if len(detection) >= 5:
@@ -238,7 +235,7 @@ class ObjectDetectionUtils:
                                 scores.append(float(confidence))
                                 classes.append(class_id)
                                 
-                                print(f"Found detection: class={class_id}, conf={confidence:.3f}, "
+                                print(f"  Found detection: class={class_id}, label={self.labels[class_id]}, conf={confidence:.3f}, "
                                     f"box=[{x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f}]")
 
             result = {
