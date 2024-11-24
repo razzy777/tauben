@@ -17,16 +17,10 @@ from hailo_platform.pyhailort import pyhailort
 
 
 class HailoAsyncInference:
-    def __init__(
-        self,
-        hef_path: str,
-        input_queue: queue.Queue,
-        output_queue: queue.Queue,
-        batch_size: int = 1,
-        input_type: Optional[str] = None,
-        output_type: Optional[Dict[str, str]] = None,
-        send_original_frame: bool = False
-    ) -> None:
+    def __init__(self, hef_path: str, input_queue: queue.Queue, output_queue: queue.Queue, 
+                batch_size: int = 1, input_type: Optional[str] = None, 
+                output_type: Optional[Dict[str, str]] = None, send_original_frame: bool = False) -> None:
+
         self.input_queue = input_queue
         self.output_queue = output_queue
         params = VDevice.create_params()
@@ -42,12 +36,14 @@ class HailoAsyncInference:
         self.infer_model.output().set_format_type(FormatType.FLOAT32)
         self.output_type = output_type
         self.send_original_frame = send_original_frame
-        print(f"Available output vstream infos: {[info.name for info in self.hef.get_output_vstream_infos()]}")
-        print("Input shape info:")
-        for info in self.hef.get_input_vstream_infos():
-            print(f"- Name: {info.name}")
-            print(f"- Shape: {info.shape}")
-            print(f"- Format: {info.format}")
+        input_vstream_info = self.hef.get_input_vstream_infos()[0]
+        assert input_vstream_info.shape == (640, 640, 3), f"Unexpected model input shape: {input_vstream_info.shape}"
+        
+        self.infer_model.set_batch_size(1)  # Process one frame at a time
+        self.infer_model.input().set_format_type(FormatType.UINT8)  # Keep uint8 format
+        
+        print(f"Model configured for input shape {input_vstream_info.shape}")
+
 
 
 
@@ -151,29 +147,20 @@ class ObjectDetectionUtils:
             return []
 
     def preprocess(self, image: np.ndarray, model_w: int, model_h: int) -> np.ndarray:
-        img_h, img_w = image.shape[:2]
-        scale = min(model_w / img_w, model_h / img_h)
-        new_w, new_h = int(img_w * scale), int(img_h * scale)
-        resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-
-        # Pad to target size
-        delta_w = model_w - new_w
-        delta_h = model_h - new_h
-        top, bottom = delta_h // 2, delta_h - (delta_h // 2)
-        left, right = delta_w // 2, delta_w - (delta_w // 2)
-
-        # Assuming the model expects RGB images with values [0, 1]
-        padded_image = cv2.copyMakeBorder(
-            resized_image, top, bottom, left, right,
-            cv2.BORDER_CONSTANT, value=self.padding_color
-        )
-        padded_image = cv2.cvtColor(padded_image, cv2.COLOR_BGR2RGB)
-        padded_image = padded_image.astype(np.float32) / 255.0
-
-        # Transpose to CHW format
-        chw_image = np.transpose(padded_image, (2, 0, 1))
-        final_image = np.ascontiguousarray(chw_image)
-        return final_image
+        """
+        Preprocess image for YOLOv8 inference.
+        Expects and maintains 640x640x3 uint8 format.
+        """
+        # Input should already be 640x640 from libcamera-vid
+        assert image.shape == (640, 640, 3), f"Expected shape (640, 640, 3), got {image.shape}"
+        
+        # Convert BGR to RGB
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        # Ensure contiguous uint8 array
+        image = np.ascontiguousarray(image, dtype=np.uint8)
+        
+        return image
 
     def extract_detections(self, input_data: dict, orig_image_shape: Tuple[int, int], model_input_shape: Tuple[int, int]) -> dict:
         try:
