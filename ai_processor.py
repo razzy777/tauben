@@ -217,62 +217,30 @@ class ObjectDetectionUtils:
                 if isinstance(detection_list, list):
                     for class_idx, arr in enumerate(detection_list):
                         if isinstance(arr, np.ndarray) and arr.size > 0:
-                            formatted_output.append({
-                                "classId": class_idx,
-                                "values": arr.tolist()
-                            })
+                            confidence = arr[-1]  # Last element is confidence
+                            
+                            # If this class hasn't been seen or this confidence is higher
+                            if class_idx not in class_confidences or confidence > class_confidences[class_idx]['confidence']:
+                                class_confidences[class_idx] = {
+                                    'confidence': confidence,
+                                    'values': arr.tolist()
+                                }
+            
+            # Convert the dictionary to our final output format
+            formatted_output = [
+                {
+                    "classId": class_idx,
+                    "values": data['values']
+                }
+                for class_idx, data in class_confidences.items()
+            ]
             
             if len(formatted_output) == 0:
                 return self._empty_detection_result()
 
             print("formatted_output", formatted_output)
-
-
             
-            # Access the nested list containing class detections
-            detections_per_class = output_list[0]
-
-            if not isinstance(detections_per_class, list):
-                return self._empty_detection_result()
-
-            print("\nProcessing detections:")
-            print(f"Number of detection classes: {len(detections_per_class)}")
-
-            boxes = []
-            scores = []
-            classes = []
-
-            # Loop over each class's detections
-            for class_id, detection_array in enumerate(detections_per_class):
-                if isinstance(detection_array, np.ndarray) and detection_array.size > 0:
-                    print(f"Detections for class ID {class_id} ({self.labels[class_id] if class_id < len(self.labels) else 'Unknown'}):")
-                    for detection in detection_array:
-                        # Assuming format: [x1, y1, x2, y2, confidence]
-                        if len(detection) >= 5:
-                            x1, y1, x2, y2, confidence = detection[:5]
-                            
-                            if confidence > self.confidence_threshold:
-                                # Normalize coordinates if they aren't already
-                                img_h, img_w = orig_image_shape
-                                if x1 > 1 or y1 > 1 or x2 > 1 or y2 > 1:
-                                    x1, x2 = x1 / img_w, x2 / img_w
-                                    y1, y2 = y1 / img_h, y2 / img_h
-                                
-                                boxes.append([y1, x1, y2, x2])
-                                scores.append(float(confidence))
-                                classes.append(class_id)
-                                
-                                print(f"  Found detection: class={class_id}, label={self.labels[class_id]}, conf={confidence:.3f}, "
-                                    f"box=[{x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f}]")
-
-            result = {
-                'detection_boxes': boxes,
-                'detection_classes': classes,
-                'detection_scores': scores,
-                'num_detections': len(scores)
-            }
-            
-            return result
+            return formatted_output
 
         except Exception as e:
             print(f"Error extracting detections: {e}")
@@ -399,13 +367,9 @@ class AIProcessor:
                 original_frame, outputs = self.output_queue.get(timeout=2.0)
                 if outputs:
                     detections = self.utils.extract_detections(outputs, frame.shape[:2])
-                    if detections['num_detections'] > 0:
-                        formatted_detections = self.utils.format_detections_for_frontend(
-                            detections, frame.shape
-                        )
-                        if formatted_detections:
-                            self.logger.info(f"Sending {len(formatted_detections)} detections")
-                            self.sio.emit('aiDetections', formatted_detections, namespace='/ai')
+                    # Directly emit the formatted output without additional formatting
+                    if len(detections) > 0:  # If we have any detections
+                        self.sio.emit('aiDetections', detections, namespace='/ai')
 
             except queue.Empty:
                 self.logger.warning("Inference timeout")
@@ -418,7 +382,7 @@ class AIProcessor:
             self.logger.error(f"Frame processing error: {e}")
             import traceback
             traceback.print_exc()
-
+            
     def connect(self):
         while not self.connected:
             try:
