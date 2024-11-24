@@ -237,7 +237,7 @@ class ObjectDetectionUtils:
             
             if len(formatted_output) == 0:
                 return self._empty_detection_result()
-                
+            print('formatted_output', formatted_output)
             return formatted_output
 
         except Exception as e:
