@@ -199,11 +199,14 @@ class ObjectDetectionUtils:
             print("im here!!!!:")
             output_name = list(input_data.keys())[0]
             output_list = input_data.get(output_name)
+            print("1212 here!!!!:", output_list)
+            print("PPP here!!!!:", output_name)
+
+
             
             if (output_list is None or not isinstance(output_list, list) or len(output_list) == 0):
                 return self._empty_detection_result()
-            print("1212 here!!!!:")
-            print("1212 here!!!!:", output_list)
+            print("999 here!!!!:")
 
 
             
