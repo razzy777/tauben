@@ -182,6 +182,30 @@ const BoundingBox = styled.div`
   background-color: rgba(255, 0, 0, 0.3);
 `;
 
+const Label = styled.div`
+  position: absolute;
+  top: -25px;
+  left: -2px; // Align with border
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 3px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  border-radius: 3px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &::after {
+    content: "${props => props.confidence}%";
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 11px;
+  }
+`;
+
 const ConnectionStatus = styled.div`
   position: fixed;
   bottom: 1rem;
@@ -402,21 +426,27 @@ function App() {
                   alt="Live Feed"
                   onError={(e) => console.error('Image failed to load:', e)}
                 />
-                {detections.map((detection, index) => {
-                  const { box, meta } = detection;
-                  const [ymin, xmin, ymax, xmax] = box;
-                  return (
-                    <BoundingBox
-                      key={index}
-                      style={{
-                        top: `${ymin * 100}%`,
-                        left: `${xmin * 100}%`,
-                        width: `${(xmax - xmin) * 100}%`,
-                        height: `${(ymax - ymin) * 100}%`
-                      }}
-                    />
-                  );
-                })}
+                  {detections.map((detection, index) => {
+                    const { box, meta } = detection;
+                    const [ymin, xmin, ymax, xmax] = box;
+                    const confidence = (meta.confidence * 100).toFixed(1);
+
+                    return (
+                      <BoundingBox
+                        key={index}
+                        style={{
+                          top: `${ymin * 100}%`,
+                          left: `${xmin * 100}%`,
+                          width: `${(xmax - xmin) * 100}%`,
+                          height: `${(ymax - ymin) * 100}%`
+                        }}
+                      >
+                        <Label confidence={confidence}>
+                          {meta.className}
+                        </Label>
+                      </BoundingBox>
+                    );
+                  })}
               </VideoOverlayContainer>
             ) : (
               <NoImage>
