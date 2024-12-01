@@ -27,7 +27,7 @@ class ServoController {
             // Reinitialize and set high
             this.servo = new Gpio(this.pin, 'out');
             await this.servo.write(1);
-            console.log('Servo activated');
+            console.log('Relay activated');
         } catch (error) {
             console.error('Error activating servo:', error);
             throw error;
@@ -36,7 +36,7 @@ class ServoController {
 
     async deactivate() {
         try {
-            console.log('Deactivating servo...');
+            console.log('Deactivating Relay...');
             // First unexport
             this.servo.unexport();
             await this.delay(100);
@@ -44,9 +44,9 @@ class ServoController {
             // Reinitialize and set low
             this.servo = new Gpio(this.pin, 'out');
             await this.servo.write(0);
-            console.log('Servo deactivated');
+            console.log('Relay deactivated');
         } catch (error) {
-            console.error('Error deactivating servo:', error);
+            console.error('Error deactivating Relay:', error);
             throw error;
         }
     }

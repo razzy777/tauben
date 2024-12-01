@@ -377,7 +377,7 @@ function App() {
 
   const handleSprayWater = () => {
     if (socketRef.current) {
-      socketRef.current.emit('activateWater', 500);
+      socketRef.current.emit('activateWater', 100);
     }
   };
 
