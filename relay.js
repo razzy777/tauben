@@ -8,18 +8,18 @@ class ServoController {
 
     async init() {
         try {
-            console.log(`Initializing servo on pin ${this.pin}...`);
+            console.log(`Initializing solenoid on pin ${this.pin}...`);
             this.servo = new Gpio(this.pin, 'out');
-            console.log('Servo initialized');
+            console.log('solenoid initialized');
         } catch (error) {
-            console.error('Error initializing servo:', error);
+            console.error('Error initializing solenoid:', error);
             throw error;
         }
     }
 
     async activate() {
         try {
-            console.log('Activating servo...');
+            console.log('Activating solenoid...');
             // First unexport
             this.servo.unexport();
             await this.delay(100);
@@ -29,7 +29,7 @@ class ServoController {
             await this.servo.write(1);
             console.log('Relay activated');
         } catch (error) {
-            console.error('Error activating servo:', error);
+            console.error('Error activating solenoid:', error);
             throw error;
         }
     }
@@ -60,7 +60,7 @@ class ServoController {
             if (this.servo) {
                 await this.deactivate();
                 this.servo.unexport();
-                console.log('Servo cleanup completed');
+                console.log('solenoid cleanup completed');
             }
         } catch (error) {
             console.error('Error during cleanup:', error);

@@ -9,7 +9,11 @@ const cocoLabels = fs.readFileSync('coco.txt', 'utf-8').split('\n');
 
 
 // Create the relay controller
-const relayController = new ServoController(588); // Replace with the appropriate pin number
+//
+
+// 588 = Channel 1 (Solenoid)
+// 598 = Channel 2 (Pump)
+const relayController = new ServoController(598); // Replace with the appropriate pin number
 
 const server = http.createServer();
 
