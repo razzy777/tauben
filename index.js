@@ -385,7 +385,8 @@ async function handleShutdown() {
     console.log('Servo system cleaned up');
 
     // Cleanup relay controller
-    await relayController.cleanup();
+    await relayControllerSolenoid.cleanup();
+    await relayControllerPump.cleanup();
     console.log('Relay controller cleaned up');
 
     // Close server
