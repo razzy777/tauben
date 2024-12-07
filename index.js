@@ -56,7 +56,6 @@ async function initializeSystem() {
 
     // Initialize relay controller
     await relayControllerPump.init();
-    await relayControllerPump.activate();
     console.log('relayControllerPump controller initialized');
     
 
