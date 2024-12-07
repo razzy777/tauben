@@ -479,10 +479,16 @@ function App() {
                 📸 Take Photo
               </ActionButton>
               <ActionButton onClick={() => handleSprayWater(10)} water>
-                💧 Spray Water (10ms)
+                💧 Spray Water (1ms)
               </ActionButton>
               <ActionButton onClick={() => handleSprayWater(50)} water>
-                💧 Spray Water (50ms)
+                💧 Spray Water (3ms)
+              </ActionButton>
+              <ActionButton onClick={() => handleSprayWater(10)} water>
+                💧 Spray Water (5ms)
+              </ActionButton>
+              <ActionButton onClick={() => handleSprayWater(50)} water>
+                💧 Spray Water (10ms)
               </ActionButton>
               <ActionButton onClick={() => handleActivatePump(1000)} water>
                 💧 Pump Water (1 sec)
