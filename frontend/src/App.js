@@ -478,22 +478,22 @@ function App() {
               <ActionButton onClick={() => socketRef.current?.emit('takePhoto')}>
                 📸 Take Photo
               </ActionButton>
-              <ActionButton onClick={handleSprayWater(100)} water>
+              <ActionButton onClick={() => handleSprayWater(100)} water>
                 💧 Spray Water (100ms)
               </ActionButton>
-              <ActionButton onClick={handleSprayWater(100)} water>
+              <ActionButton onClick={() => handleSprayWater(100)} water>
                 💧 Spray Water (300ms)
               </ActionButton>
-              <ActionButton onClick={handleActivatePump(1000)} water>
+              <ActionButton onClick={() => handleActivatePump(1000)} water>
                 💧 Pump Water (1 sec)
               </ActionButton>
-              <ActionButton onClick={handleActivatePump(3000)} water>
+              <ActionButton onClick={() => handleActivatePump(3000)} water>
               💧 Pump Water (3 sec)
               </ActionButton>
-              <ActionButton onClick={handleActivatePump(5000)} water>
+              <ActionButton onClick={() => handleActivatePump(5000)} water>
               💧 Pump Water (5 sec)
               </ActionButton>
-              <ActionButton onClick={handleActivatePump(10000)} water>
+              <ActionButton onClick={() => handleActivatePump(10000)} water>
               💧 Pump Water (10 sec)
               </ActionButton>
               <ActionButton onClick={() => socketRef.current?.emit('startScan')}>
