@@ -69,17 +69,17 @@ class ServoController {
     }
 
     // Function to activate the relay for a specific time in milliseconds
-    async activateWater(duration) {
+    async activateRelayByTime(duration) {
         try {
             await this.activate();
             await this.delay(duration);
             await this.deactivate();
             console.log(`Relay activated for ${duration}ms`);
         } catch (error) {
-            console.error('Error during activateWater:', error);
+            console.error('Error during activateRelayByTime:', error);
             throw error;
         }
-    }
+    }    
 }
 
 // Export the functions

@@ -375,9 +375,15 @@ function App() {
     }, 100);
   };
 
-  const handleSprayWater = () => {
+  const handleSprayWater = (ms) => {
     if (socketRef.current) {
-      socketRef.current.emit('activateWater', 10000);
+      socketRef.current.emit('activateWater', ms);
+    }
+  };
+
+  const handleActivatePump = (ms) => {
+    if (socketRef.current) {
+      socketRef.current.emit('activatePump', ms);
     }
   };
 
@@ -472,8 +478,23 @@ function App() {
               <ActionButton onClick={() => socketRef.current?.emit('takePhoto')}>
                 📸 Take Photo
               </ActionButton>
-              <ActionButton onClick={handleSprayWater} water>
-                💧 Spray Water
+              <ActionButton onClick={handleSprayWater(100)} water>
+                💧 Spray Water (100ms)
+              </ActionButton>
+              <ActionButton onClick={handleSprayWater(100)} water>
+                💧 Spray Water (300ms)
+              </ActionButton>
+              <ActionButton onClick={handleActivatePump(1000)} water>
+                💧 Pump Water (1 sec)
+              </ActionButton>
+              <ActionButton onClick={handleActivatePump(3000)} water>
+              💧 Pump Water (3 sec)
+              </ActionButton>
+              <ActionButton onClick={handleActivatePump(5000)} water>
+              💧 Pump Water (5 sec)
+              </ActionButton>
+              <ActionButton onClick={handleActivatePump(10000)} water>
+              💧 Pump Water (10 sec)
               </ActionButton>
               <ActionButton onClick={() => socketRef.current?.emit('startScan')}>
                 🔍 Scan

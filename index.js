@@ -13,7 +13,9 @@ const cocoLabels = fs.readFileSync('coco.txt', 'utf-8').split('\n');
 
 // 588 = Channel 1 (Solenoid)
 // 598 = Channel 2 (Pump)
-const relayController = new ServoController(598); // Replace with the appropriate pin number
+const relayControllerSolenoid = new ServoController(588); // Replace with the appropriate pin number
+const relayControllerPump = new ServoController(598); // Replace with the appropriate pin number
+
 
 const server = http.createServer();
 
@@ -49,8 +51,13 @@ async function initializeSystem() {
     console.log('Servo system initialized');
 
     // Initialize relay controller
-    await relayController.init();
-    console.log('Relay controller initialized');
+    await relayControllerSolenoid.init();
+    console.log('relayControllerSolenoid controller initialized');
+
+    // Initialize relay controller
+    await relayControllerPump.init();
+    console.log('relayControllerPump controller initialized');
+    
 
     // Start the server
     server.listen(3000, () => {
@@ -229,7 +236,7 @@ frontendNamespace.on('connection', (socket) => {
   socket.on('activateWater', async (duration) => {
     try {
       console.log(`Activating water for ${duration}ms...`);
-      await relayController.activateWater(duration);
+      await relayControllerSolenoid.activateRelayByTime(duration);
       socket.emit('waterActivated', { success: true });
       console.log('Water activation completed');
     } catch (error) {
@@ -237,6 +244,19 @@ frontendNamespace.on('connection', (socket) => {
       socket.emit('error', { message: 'Failed to activate water' });
     }
   });
+
+    // Handle water activation
+    socket.on('activatePump', async (duration) => {
+        try {
+            console.log(`Activating pump for ${duration}ms...`);
+            await relayControllerPump.activateRelayByTime(duration);
+            socket.emit('pumpActivated', { success: true });
+            console.log('Pump activation completed');
+        } catch (error) {
+            console.error('Error activating pump:', error);
+            socket.emit('error', { message: 'Failed to activate pump' });
+        }
+        });
 
   // Handle scan command
   socket.on('startScan', async () => {
