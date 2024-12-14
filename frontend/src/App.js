@@ -505,8 +505,8 @@ function App() {
               <ActionButton onClick={() => handleActivatePump(20000)} water>
               💧 Pump Water (20 sec)
               </ActionButton>
-              <ActionButton onClick={() => handleActivatePump(30000)} water>
-              💧 Pump Water (30 sec)
+              <ActionButton onClick={() => handleActivatePump(40000)} water>
+              💧 Pump Water (40 sec)
               </ActionButton>
               <ActionButton onClick={() => socketRef.current?.emit('startScan')}>
                 🔍 Scan
