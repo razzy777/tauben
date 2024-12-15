@@ -71,7 +71,7 @@ class ServoController {
     // Function to activate the relay for a specific time in milliseconds
     async activateRelayByTime(duration) {
         try {
-            await this.activate();
+            this.activate();
             await this.delay(duration);
             await this.deactivate();
             console.log(`Relay activated for ${duration}ms`);
