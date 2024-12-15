@@ -248,17 +248,32 @@ frontendNamespace.on('connection', (socket) => {
   });
 
     // Handle water activation
-    socket.on('activatePump', async (duration) => {
+    socket.on('activatePump', async (duration = false) => {
         try {
-            console.log(`Activating pump for ${duration}ms...`);
-            await relayControllerPump.activateRelayByTime(duration);
+            console.log(`Activating pump for ${duration || 'unlimited' }ms...`);
+            if (duration) {
+              await relayControllerPump.activateRelayByTime(duration);
+            } else {
+              await relayControllerPump.activateRelayUnlimited();
+            }
             socket.emit('pumpActivated', { success: true });
             console.log('Pump activation completed');
         } catch (error) {
             console.error('Error activating pump:', error);
             socket.emit('error', { message: 'Failed to activate pump' });
         }
-        });
+    });
+    socket.on('deactivatePump', async () => {
+      try {
+          console.log(`Deactivating pump...`);
+          await relayControllerPump.deactivateRelay();
+          socket.emit('pumpDeactivated', { success: true });
+          console.log('Pump deactivation completed');
+      } catch (error) {
+          console.error('Error deactivating pump:', error);
+          socket.emit('error', { message: 'Failed to deactivate pump' });
+      }
+  });
 
   // Handle scan command
   socket.on('startScan', async () => {

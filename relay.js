@@ -57,6 +57,16 @@ class ServoController {
             throw error;
         }
     }    
+
+    async activateRelayUnlimited () {
+        this.servo.writeSync(1)
+        console.log(`Relay pump switched on`);
+    }
+
+    async deactivatePump () {
+        this.servo.writeSync(0)
+        console.log(`Relay pump switched off`);
+    }
 }
 
 // Export the functions

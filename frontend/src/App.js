@@ -381,9 +381,14 @@ function App() {
     }
   };
 
-  const handleActivatePump = (ms) => {
+  const handleActivatePump = (ms = false) => {
     if (socketRef.current) {
       socketRef.current.emit('activatePump', ms);
+    }
+  };
+  const handleDectivatePump = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('deactivatePump');
     }
   };
 
@@ -479,34 +484,31 @@ function App() {
                 📸 Take Photo
               </ActionButton>
               <ActionButton onClick={() => handleSprayWater(10)} water>
-                💧 Spray Water (1ms)
-              </ActionButton>
-              <ActionButton onClick={() => handleSprayWater(50)} water>
-                💧 Spray Water (3ms)
-              </ActionButton>
-              <ActionButton onClick={() => handleSprayWater(10)} water>
-                💧 Spray Water (5ms)
-              </ActionButton>
-              <ActionButton onClick={() => handleSprayWater(50)} water>
                 💧 Spray Water (10ms)
               </ActionButton>
-              <ActionButton onClick={() => handleActivatePump(1000)} water>
-                💧 Pump Water (1 sec)
+              <ActionButton onClick={() => handleSprayWater(20)} water>
+                💧 Spray Water (20ms)
               </ActionButton>
-              <ActionButton onClick={() => handleActivatePump(3000)} water>
-              💧 Pump Water (3 sec)
+              <ActionButton onClick={() => handleSprayWater(30)} water>
+                💧 Spray Water (30ms)
               </ActionButton>
-              <ActionButton onClick={() => handleActivatePump(5000)} water>
-              💧 Pump Water (5 sec)
+              <ActionButton onClick={() => handleSprayWater(50)} water>
+                💧 Spray Water (50ms)
               </ActionButton>
-              <ActionButton onClick={() => handleActivatePump(10000)} water>
-              💧 Pump Water (10 sec)
+              <ActionButton onClick={() => handleSprayWater(80)} water>
+                💧 Spray Water (80ms)
               </ActionButton>
-              <ActionButton onClick={() => handleActivatePump(20000)} water>
-              💧 Pump Water (20 sec)
+              <ActionButton onClick={() => handleSprayWater(100)} water>
+                💧 Spray Water (100ms)
               </ActionButton>
-              <ActionButton onClick={() => handleActivatePump(40000)} water>
-              💧 Pump Water (40 sec)
+              <ActionButton onClick={() => handleSprayWater(150)} water>
+                💧 Spray Water (150ms)
+              </ActionButton>
+              <ActionButton onClick={() => handleActivatePump()} water>
+              💧 Start Pump Water
+              </ActionButton>
+              <ActionButton onClick={() => handleDectivatePump()} water>
+              💧 Deactivate Pump Water
               </ActionButton>
               <ActionButton onClick={() => socketRef.current?.emit('startScan')}>
                 🔍 Scan
