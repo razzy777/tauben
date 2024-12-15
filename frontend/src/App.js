@@ -224,6 +224,8 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [buttonStates, setButtonStates] = useState({});
   const [keysPressed, setKeysPressed] = useState({});
+  const [customMs, setCustomMs] = useState('');
+
   const socketRef = useRef(null);
   
   const MOVEMENT_AMOUNT = 5;
@@ -483,6 +485,13 @@ function App() {
               <ActionButton onClick={() => socketRef.current?.emit('takePhoto')}>
                 📸 Take Photo
               </ActionButton>
+              <input
+              type="number"
+              value={customMs}
+              onChange={(e) => setCustomMs(e.target.value)}
+              placeholder="Enter ms"
+              style={{ width: '80px', marginBottom: '1rem' }}
+            />
               <ActionButton onClick={() => handleSprayWater(10)} water>
                 💧 Spray Water (10ms)
               </ActionButton>
@@ -504,6 +513,12 @@ function App() {
               <ActionButton onClick={() => handleSprayWater(150)} water>
                 💧 Spray Water (150ms)
               </ActionButton>
+              <ActionButton onClick={() => {
+              if (customMs) handleSprayWater(Number(customMs))
+            }} water>
+              💧 Spray Water (custom)
+            </ActionButton>
+
               <ActionButton onClick={() => handleActivatePump()} water>
               💧 Start Pump Water
               </ActionButton>
