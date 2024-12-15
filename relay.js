@@ -18,38 +18,15 @@ class ServoController {
     }
 
     async activate() {
-        try {
-            console.log('Activating solenoid...');
-            // First unexport
-            this.servo.unexport();
-            await this.delay(100);
-            
-            // Reinitialize and set high
-            this.servo = new Gpio(this.pin, 'out');
-            await this.servo.write(1);
-            console.log('Relay activated');
-        } catch (error) {
-            console.error('Error activating solenoid:', error);
-            throw error;
-        }
+        await this.servo.write(1)
+        console.log('Relay activated')
     }
-
+      
     async deactivate() {
-        try {
-            console.log('Deactivating Relay...');
-            // First unexport
-            this.servo.unexport();
-            await this.delay(100);
-            
-            // Reinitialize and set low
-            this.servo = new Gpio(this.pin, 'out');
-            await this.servo.write(0);
-            console.log('Relay deactivated');
-        } catch (error) {
-            console.error('Error deactivating Relay:', error);
-            throw error;
-        }
+        await this.servo.write(0)
+        console.log('Relay deactivated')
     }
+      
 
     async delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -71,9 +48,9 @@ class ServoController {
     // Function to activate the relay for a specific time in milliseconds
     async activateRelayByTime(duration) {
         try {
-            this.activate();
-            await this.delay(duration);
-            await this.deactivate();
+            this.servo.writeSync(1)
+            await this.delay(duration)
+            this.servo.writeSync(0)
             console.log(`Relay activated for ${duration}ms`);
         } catch (error) {
             console.error('Error during activateRelayByTime:', error);
