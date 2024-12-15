@@ -235,8 +235,10 @@ frontendNamespace.on('connection', (socket) => {
   // Handle water activation
   socket.on('activateWater', async (duration) => {
     try {
-      console.log(`Activating water for ${duration}ms...`);
+      let time1 = new Date().getTime()
       await relayControllerSolenoid.activateRelayByTime(duration);
+      let time2 = new Date().getTime()
+      console.log(`Activating water was ${Math.floor(time2-time1)}ms...`);
       socket.emit('waterActivated', { success: true });
       console.log('Water activation completed');
     } catch (error) {
